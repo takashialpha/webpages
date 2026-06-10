@@ -1,13 +1,11 @@
 # web-page-test
 
-A [Leptos](https://github.com/leptos-rs/leptos) + [Axum](https://github.com/tokio-rs/axum) web app, built with [cargo-leptos](https://github.com/leptos-rs/cargo-leptos).
+A [Leptos](https://github.com/leptos-rs/leptos) + [Axum](https://github.com/tokio-rs/axum) web app.
 
 ## Prerequisites
 
-1. Rust nightly: `rustup toolchain install nightly --allow-downgrade`
-2. WASM target: `rustup target add wasm32-unknown-unknown`
-3. `cargo install cargo-leptos --locked`
-4. `dart-sass`: `npm install -g sass`
+1. WASM target: `rustup target add wasm32-unknown-unknown`
+2. `cargo install cargo-leptos`
 
 ## Running locally
 
@@ -38,6 +36,10 @@ export LEPTOS_RELOAD_PORT="3001"
 ```
 
 and run the binary.
+
+## Notes
+
+place a favicon on public.
 
 ## License
 
