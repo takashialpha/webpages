@@ -1,4 +1,6 @@
-A [Leptos](https://github.com/leptos-rs/leptos) + [Axum](https://github.com/tokio-rs/axum) web app.
+# my webpages
+
+[Leptos](https://github.com/leptos-rs/leptos) and [Axum](https://github.com/tokio-rs/axum) stack.
 
 ## Prerequisites
 
