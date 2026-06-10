@@ -10,7 +10,7 @@ uses a [Leptos](https://github.com/leptos-rs/leptos) and [Axum](https://github.c
 ## Running locally
 
 ```bash
-cargo leptos watch
+cargo leptos watch --release
 ```
 
 The server listens on `[::1]:3000` (IPv6 loopback only) by default, configurable via `site-addr` in `Cargo.toml` or the `LEPTOS_SITE_ADDR` environment variable.
