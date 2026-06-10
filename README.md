@@ -1,6 +1,6 @@
 # my webpages
 
-uses [Leptos](https://github.com/leptos-rs/leptos) and [Axum](https://github.com/tokio-rs/axum) stack.
+uses a [Leptos](https://github.com/leptos-rs/leptos) and [Axum](https://github.com/tokio-rs/axum) stack.
 
 ## Prerequisites
 
