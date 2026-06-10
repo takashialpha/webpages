@@ -2400,7 +2400,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "web-page-test"
+name = "web-sys"
+version = "0.3.100"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e0871acf327f283dc6da28a1696cdc64fb355ba9f935d052021fa77f35cce69"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "webpages"
 version = "0.0.0"
 dependencies = [
  "axum",
@@ -2410,16 +2420,6 @@ dependencies = [
  "leptos_meta",
  "leptos_router",
  "tokio",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "web-sys"
-version = "0.3.100"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e0871acf327f283dc6da28a1696cdc64fb355ba9f935d052021fa77f35cce69"
-dependencies = [
- "js-sys",
  "wasm-bindgen",
 ]
 
