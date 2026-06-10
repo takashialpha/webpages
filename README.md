@@ -1,5 +1,3 @@
-# web-page-test
-
 A [Leptos](https://github.com/leptos-rs/leptos) + [Axum](https://github.com/tokio-rs/axum) web app.
 
 ## Prerequisites
@@ -28,7 +26,7 @@ Produces the server binary in `target/release` and the site assets in `target/si
 After `cargo leptos build --release`, copy the server binary and the `target/site` directory to the target host, then set:
 
 ```sh
-export LEPTOS_OUTPUT_NAME="web-page-test"
+export LEPTOS_OUTPUT_NAME="webpages"
 export LEPTOS_SITE_ROOT="site"
 export LEPTOS_SITE_PKG_DIR="pkg"
 export LEPTOS_SITE_ADDR="[::1]:3000"
@@ -39,7 +37,11 @@ and run the binary.
 
 ## Notes
 
-place a favicon on public.
+todo:
+place a favicon on public;
+add workflows;
+make a better css;
+add contents to the page;
 
 ## License
 
