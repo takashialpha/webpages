@@ -40,10 +40,11 @@ and run the binary.
 ## Notes
 
 todo:
-place a favicon on public;
-add workflows;
-make a better css;
-add contents to the page;
+- place a favicon on public;
+- add workflows;
+- make a better css;
+- add contents to the pages;
+- make this readme prettier;
 
 ## License
 
