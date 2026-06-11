@@ -10,7 +10,7 @@ uses a [Leptos](https://github.com/leptos-rs/leptos) and [Axum](https://github.c
 ## Running locally
 
 ```bash
-cargo leptos watch --release
+cargo leptos serve --release
 ```
 
 The server listens on `[::1]:3000` (IPv6 loopback only) by default, configurable via `site-addr` in `Cargo.toml` or the `LEPTOS_SITE_ADDR` environment variable.
@@ -36,12 +36,6 @@ export LEPTOS_RELOAD_PORT="3001"
 ```
 
 and run the binary.
-
-## Notes
-
-todo:
-- add contents to the pages;
-- make this readme prettier;
 
 ## License
 
