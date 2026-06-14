@@ -1,3 +1,7 @@
+// Large static view trees produce deeply nested generic future types; the async
+// SSR-resolve / hydrate paths exceed the default query depth of 128 in release.
+#![recursion_limit = "256"]
+
 pub mod app;
 
 #[cfg(feature = "hydrate")]

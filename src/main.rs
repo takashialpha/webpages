@@ -1,3 +1,6 @@
+// See lib.rs: deeply nested view-tree future types overflow the default depth in release.
+#![recursion_limit = "256"]
+
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
