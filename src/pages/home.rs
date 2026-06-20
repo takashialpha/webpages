@@ -28,7 +28,7 @@ pub fn HomePage() -> impl IntoView {
 #[component]
 pub fn NotFound() -> impl IntoView {
     view! {
-        <Title text="404 — not found"/>
+        <Title text="404, not found"/>
         <section class="landing">
             <div class="landing-inner">
                 <p class="landing-prompt">

@@ -1,4 +1,4 @@
-//! `/audium` — landing page for the terminal music player.
+//! `/audium`, landing page for the terminal music player.
 
 use leptos::prelude::*;
 use leptos_meta::{Meta, Title};
@@ -18,7 +18,7 @@ fn WhyItem(title: &'static str, children: Children) -> impl IntoView {
 #[component]
 pub fn Audium() -> impl IntoView {
     view! {
-        <Title text="audium — terminal music player"/>
+        <Title text="audium, terminal music player"/>
         <Meta
             name="description"
             content="A keyboard-driven music player that lives in your terminal. No Electron. No cloud. Just audio."
@@ -34,7 +34,7 @@ pub fn Audium() -> impl IntoView {
                 // ── hero ──────────────────────────────────────────────────
                 <header class="a-hero reveal">
                     <div class="term">
-                        <TermBar title="audium — now playing"/>
+                        <TermBar title="audium, now playing"/>
                         <div class="term-body">
                             <p class="line">
                                 <span class="usr">"you"</span>
@@ -87,7 +87,7 @@ pub fn Audium() -> impl IntoView {
                     </div>
                     <p class="a-note">
                         "audium targets linux exclusively and uses alsa, the standard linux "
-                        "audio api — its development headers are needed to build, see the "
+                        "audio api, its development headers are needed to build, see the "
                         <a href="https://github.com/takashialpha/audium#building-from-source"
                             target="_blank" rel="noreferrer">"readme"</a>
                         " for distro-specific instructions."
@@ -103,54 +103,38 @@ pub fn Audium() -> impl IntoView {
                     <div class="cards">
                         <Feature icon="♪" title="format agnostic">
                             "plays MP3, FLAC, OGG, WAV, AAC, M4A, Opus, AIFF and more via "
-                            "Symphonia — no FFmpeg required."
+                            "Symphonia, with no FFmpeg required."
                         </Feature>
-                        <Feature icon="⌨" title="fully keyboard-driven">
-                            "every action is a single keypress. Tab between panels, "
-                            <code>"j"</code>"/"<code>"k"</code>" to navigate, space to play."
+                        <Feature icon="⌨" title="keyboard-driven">
+                            "built to be driven entirely from the keyboard, for people who live "
+                            "in the terminal and never reach for the mouse."
                         </Feature>
-                        <Feature icon="📂" title="built-in file picker">
-                            "browse your filesystem and import audio without ever leaving the app."
-                        </Feature>
-                        <Feature icon="🏷" title="track metadata">
-                            "artist, album, year and genre are read automatically from your "
-                            "files' tags on import and shown throughout the UI. Edit any field "
-                            "in-app with "<code>"e"</code>", or open the built-in lyrics editor "
-                            "from the same screen."
-                        </Feature>
-                        <Feature icon="🎨" title="themes">
-                            "15 built-in themes — dark, light, nord, gruvbox, catppuccin, "
-                            "rosé pine, dracula, tokyo night, and more. Switch live with "
-                            "instant preview. Transparency support for composited terminals."
-                        </Feature>
-                        <Feature icon="🎵" title="playlists & loop modes">
-                            "create, rename, and delete playlists. Loop a single track or the "
-                            "whole queue — toggle with "<code>"l"</code>"."
-                        </Feature>
-                        <Feature icon="🔀" title="shuffle">
-                            "shuffle any playlist into the queue with a single keypress. Keeps "
-                            "your library intact while letting you rediscover it."
-                        </Feature>
-                        <Feature icon="⚡" title="playback speed">
-                            "adjust speed from 0.05× to 3× in 0.05× steps with "<code>"["</code>
-                            " and "<code>"]"</code>". Displayed in the player bar when not at 1×."
-                        </Feature>
-                        <Feature icon="🔍" title="tracklist filter">
-                            "press "<code>"/"</code>" to filter by title, artist, album, year or "
-                            "genre in real time. Esc clears. Works across all playlists."
+                        <Feature icon="🏷" title="library & metadata">
+                            "import your files and audium reads artist, album, year and genre "
+                            "from their tags automatically, all editable in-app."
                         </Feature>
                         <Feature icon="🎤" title="lyrics">
-                            "store plain or LRC synced lyrics per track. Toggle an overlay with "
-                            <code>"y"</code>" — synced lyrics auto-scroll to the current line; "
-                            "plain lyrics scroll with "<code>"j/k"</code>". Edit directly with "
-                            "the built-in text editor."
+                            "store plain or synced lyrics per track, with an overlay that "
+                            "follows along as the song plays."
+                        </Feature>
+                        <Feature icon="🎨" title="themes">
+                            "15 built-in themes including nord, gruvbox, catppuccin, rosé pine, "
+                            "dracula and tokyo night. switch live, with transparency support."
+                        </Feature>
+                        <Feature icon="🎵" title="playlists & queue">
+                            "build playlists, shuffle them into the queue, and loop a single "
+                            "track or the whole thing."
+                        </Feature>
+                        <Feature icon="⚡" title="playback control">
+                            "filter your library as you type, adjust playback speed, and seek "
+                            "freely."
                         </Feature>
                         <Feature icon="🔊" title="threaded audio">
-                            "playback runs on a dedicated thread. UI interactions will never "
-                            "stutter your music."
+                            "playback runs on its own thread, so the interface never stutters "
+                            "your music."
                         </Feature>
                         <Feature icon="💾" title="it's your library">
-                            "stored at "<code>"$XDG_DATA_HOME/audium/library.json"</code>" — plain "
+                            "stored at "<code>"$XDG_DATA_HOME/audium/library.json"</code>", plain "
                             "JSON, human-readable, editable by hand. audium doesn't rename your "
                             "files, doesn't embed metadata, and never phones home."
                         </Feature>
@@ -178,7 +162,7 @@ pub fn Audium() -> impl IntoView {
                             "binary with no runtime surprises."
                         </WhyItem>
                         <WhyItem title="cleaner ui">
-                            "built on ratatui with a layout designed for daily use — not just "
+                            "built on ratatui with a layout designed for daily use, not just "
                             "feature completeness. Panels, queue, progress bar, volume: "
                             "everything visible at once."
                         </WhyItem>
@@ -192,7 +176,7 @@ pub fn Audium() -> impl IntoView {
                         </WhyItem>
                         <WhyItem title="system audio, done right">
                             "audium plays through your default system output. Switch devices at "
-                            "the OS level and it follows — no in-app device picker that fights "
+                            "the OS level and it follows, no in-app device picker that fights "
                             "your setup."
                         </WhyItem>
                     </div>

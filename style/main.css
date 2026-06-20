@@ -1,9 +1,9 @@
 /* ───────────────────────────────────────────────────────────────────────────
-   takashialpha — terminal-first personal page
+   takashialpha, terminal-first personal page
    palette: catppuccin mocha · type: jetbrains mono
    ─────────────────────────────────────────────────────────────────────────── */
 
-/* self-hosted JetBrains Mono — latin subset, files live in /public/fonts */
+/* self-hosted JetBrains Mono, latin subset, files live in /public/fonts */
 @font-face {
   font-family: "JetBrains Mono";
   font-style: normal;
@@ -66,7 +66,7 @@
   --red:      #f38ba8;
 
   --accent: var(--green);
-  --accent-rgb: 166, 227, 161; /* green — overridden per page (see .page.audium) */
+  --accent-rgb: 166, 227, 161; /* green, overridden per page (see .page.audium) */
 
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code",
           "Fira Code", Menlo, Consolas, monospace;
@@ -576,7 +576,7 @@ em { color: var(--teal); font-style: italic; }
 .landing-link:hover { border-color: var(--green); transform: translateY(-2px); }
 
 /* ───────────────────────────────────────────────────────────────────────────
-   project pages (/audium, /swagsh) — reuse the shared system, each its own accent
+   project pages (/audium, /swagsh), reuse the shared system, each its own accent
    ─────────────────────────────────────────────────────────────────────────── */
 .page.audium { --accent: var(--blue);  --accent-rgb: 137, 180, 250; }
 .page.swagsh { --accent: var(--mauve); --accent-rgb: 203, 166, 247; }

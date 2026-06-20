@@ -1,4 +1,4 @@
-//! `/takashialpha` — personal page.
+//! `/takashialpha`, personal page.
 
 use leptos::prelude::*;
 use leptos_meta::Title;
@@ -83,7 +83,7 @@ fn ProjectRow(
 #[component]
 pub fn Takashialpha() -> impl IntoView {
     view! {
-        <Title text="takashialpha — systems dev"/>
+        <Title text="takashialpha, systems dev"/>
         <div class="page">
             <div class="bg-grid" aria-hidden="true"></div>
             <div class="bg-glow" aria-hidden="true"></div>
@@ -159,7 +159,7 @@ pub fn Takashialpha() -> impl IntoView {
                             </div>
                             <h3>"linux"</h3>
                             <p>
-                                "comfortable end to end — syscalls, memory management, init, "
+                                "comfortable end to end, syscalls, memory management, init, "
                                 "filesystems, context switches. i know where things live, and "
                                 "usually why they break."
                             </p>
@@ -171,7 +171,7 @@ pub fn Takashialpha() -> impl IntoView {
                             </div>
                             <h3>"infrastructure"</h3>
                             <p>
-                                "network infrastructure across the whole path — backend "
+                                "network infrastructure across the whole path, backend "
                                 "services down to the client. routing, dns, and proxying, "
                                 "with containerized workloads on docker."
                             </p>
@@ -210,7 +210,7 @@ pub fn Takashialpha() -> impl IntoView {
                         <ProjectRow
                             name="webpages"
                             href="https://github.com/takashialpha/webpages"
-                            desc="this site — leptos, ssr, hand-written css."
+                            desc="this site, leptos, ssr, hand-written css."
                             tag=Some("you're here")
                         />
                     </ul>

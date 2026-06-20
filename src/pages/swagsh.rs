@@ -1,4 +1,4 @@
-//! `/swagsh` — landing page for the shell.
+//! `/swagsh`, landing page for the shell.
 
 use leptos::prelude::*;
 use leptos_meta::{Meta, Title};
@@ -18,10 +18,10 @@ fn WhyItem(title: &'static str, children: Children) -> impl IntoView {
 #[component]
 pub fn Swagsh() -> impl IntoView {
     view! {
-        <Title text="swagsh — a sleek, fast shell"/>
+        <Title text="swagsh, a sleek, fast shell"/>
         <Meta
             name="description"
-            content="swagsh — a sleek, high-performance Linux shell built in Rust. Pipelines, expansions, job control, and tab completion, with a startup cost measured in microseconds."
+            content="swagsh, a sleek, high-performance Linux shell built in Rust. Pipelines, expansions, job control, and tab completion, with a startup cost measured in microseconds."
         />
         <div class="page swagsh">
             <div class="bg-grid" aria-hidden="true"></div>
@@ -34,7 +34,7 @@ pub fn Swagsh() -> impl IntoView {
                 // ── hero ──────────────────────────────────────────────────
                 <header class="a-hero reveal">
                     <div class="term">
-                        <TermBar title="swagsh — ~"/>
+                        <TermBar title="swagsh, ~"/>
                         <div class="term-body">
                             <p class="line">
                                 <span class="usr">"you"</span>
@@ -53,7 +53,7 @@ pub fn Swagsh() -> impl IntoView {
                             <p class="hero-sub">
                                 "a sleek, high-performance linux shell built in rust. real "
                                 "shell grammar, full expansions, job control and tab completion "
-                                "— with a startup cost measured in microseconds. the name is "
+                                "with a startup cost measured in microseconds. the name is "
                                 "swag, for stylish flair."
                             </p>
                             <div class="hero-links">
@@ -65,7 +65,7 @@ pub fn Swagsh() -> impl IntoView {
                     </div>
 
                     <div class="term">
-                        <TermBar title="swagsh — session"/>
+                        <TermBar title="swagsh, session"/>
                         <div class="term-body">
                             <p class="line">
                                 <span class="path">"~ "</span><span class="prompt">"$ "</span>
@@ -100,34 +100,27 @@ pub fn Swagsh() -> impl IntoView {
                     </h2>
                     <div class="cards">
                         <Feature icon="⚡" title="fast">
-                            "within ~10% of dash on pure builtins, and around 37% faster than "
-                            "bash. rust's safety with a startup cost in the microseconds."
+                            "rust's safety with a startup cost measured in microseconds. fast "
+                            "enough that it gets out of your way."
                         </Feature>
                         <Feature icon="🧩" title="real shell grammar">
-                            "pipelines, and-or lists, redirections and here-strings, command "
-                            "and process substitution, control flow ("<code>"if"</code>"/"
-                            <code>"for"</code>"/"<code>"while"</code>"/"<code>"until"</code>"/"
-                            <code>"case"</code>"), functions, groups and subshells."
+                            "the posix constructs you reach for every day: pipelines, "
+                            "redirections, substitutions, control flow, functions and subshells."
                         </Feature>
                         <Feature icon="🔤" title="full expansions">
-                            "variable expansion with defaults ("<code>"${VAR:-default}"</code>
-                            " and friends), tilde expansion, and glob expansion ("<code>"*"</code>
-                            ", "<code>"?"</code>")."
+                            "variable, parameter, tilde and glob expansion, with sensible "
+                            "defaults built in."
                         </Feature>
                         <Feature icon="⌨" title="tab completion">
-                            "completes builtins, aliases, "<code>"$PATH"</code>" executables, and "
-                            "filenames — out of the box."
+                            "completes builtins, aliases, executables and filenames out of the box."
                         </Feature>
                         <Feature icon="🧵" title="job control">
-                            "background jobs, "<code>"fg"</code>"/"<code>"bg"</code>", "
-                            <code>"jobs"</code>", "<code>"kill"</code>", and Ctrl+Z to stop. the "
-                            "essentials, done right."
+                            "background jobs, foreground and background switching, stopping and "
+                            "signalling, all the essentials."
                         </Feature>
                         <Feature icon="🎛" title="configurable">
-                            <code>"~/.swagshrc"</code>" and "<code>"~/.swagsh_profile"</code>", a "
-                            <code>"$PS1"</code>" prompt with escapes ("<code>"\\w"</code>", "
-                            <code>"\\u"</code>", "<code>"\\h"</code>", "<code>"\\$"</code>"), and "
-                            "history at "<code>"~/.swagsh_history"</code>"."
+                            "config and profile files, a customizable prompt, and persistent "
+                            "history. set it up the way you like."
                         </Feature>
                     </div>
                 </section>
@@ -139,13 +132,11 @@ pub fn Swagsh() -> impl IntoView {
                         <span class="hash">"## "</span>"fast where it counts"
                     </h2>
                     <p class="a-lede">
-                        "measured with "<code>"hyperfine --shell=none"</code>" on linux x86-64. "
-                        "the numbers below are approximate ratios — see the wiki for methodology "
-                        "and current data."
+                        "measured with "<code>"hyperfine --shell=none"</code>" on linux x86-64."
                     </p>
                     <div class="a-why-grid">
                         <WhyItem title="within ~10% of dash">
-                            "on pure builtins, swagsh runs within about 10% of dash — the "
+                            "on pure builtins, swagsh runs within about 10% of dash, the "
                             "irreducible gap between rust's startup and a bare c binary."
                         </WhyItem>
                         <WhyItem title="~37% faster than bash">
@@ -153,15 +144,10 @@ pub fn Swagsh() -> impl IntoView {
                             "with a startup floor in the hundreds of microseconds."
                         </WhyItem>
                         <WhyItem title="the gap shrinks under load">
-                            "on fork+exec workloads — the things you actually run — the "
+                            "on fork+exec workloads, the commands you actually run, the "
                             "difference to bash narrows to a few percent."
                         </WhyItem>
                     </div>
-                    <p class="a-note">
-                        "full benchmark methodology and raw data live in the "
-                        <a href="https://github.com/takashialpha/swagsh/wiki/Performance"
-                            target="_blank" rel="noreferrer">"wiki"</a>"."
-                    </p>
                 </section>
 
                 // ── install ───────────────────────────────────────────────
@@ -187,10 +173,9 @@ pub fn Swagsh() -> impl IntoView {
                         </div>
                     </div>
                     <p class="a-note">
-                        "swagsh is under active development — don't replace "<code>"/bin/sh"</code>
-                        " with it without thorough testing. full command reference is in the "
-                        <a href="https://github.com/takashialpha/swagsh/wiki"
-                            target="_blank" rel="noreferrer">"wiki"</a>"."
+                        "swagsh is under active development, so don't replace "
+                        <code>"/bin/sh"</code>" with it without thorough testing. run "
+                        <code>"swagsh --help"</code>" for the full command set."
                     </p>
                 </section>
 
