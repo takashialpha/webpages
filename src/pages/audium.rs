@@ -65,7 +65,11 @@ pub fn Audium() -> impl IntoView {
 
                     <div class="term a-demo">
                         <TermBar title="~/.local/share/audium"/>
-                        <img src="/audium-demo.gif" alt="audium running in a terminal" loading="lazy"/>
+                        <img
+                            src="https://raw.githubusercontent.com/takashialpha/audium/main/audium-demo.gif"
+                            alt="audium running in a terminal"
+                            loading="lazy"
+                        />
                     </div>
                 </header>
 
@@ -107,7 +111,8 @@ pub fn Audium() -> impl IntoView {
                         </Feature>
                         <Feature icon="⌨" title="keyboard-driven">
                             "built to be driven entirely from the keyboard, for people who live "
-                            "in the terminal and never reach for the mouse."
+                            "in the terminal and never reach for the mouse. press "
+                            <code>"?"</code>" anytime to see every keybinding."
                         </Feature>
                         <Feature icon="🏷" title="library & metadata">
                             "import your files and audium reads artist, album, year and genre "
