@@ -18,10 +18,10 @@ fn WhyItem(title: &'static str, children: Children) -> impl IntoView {
 #[component]
 pub fn Swagsh() -> impl IntoView {
     view! {
-        <Title text="swagsh, a sleek, fast shell"/>
+        <Title text="swagsh, a fast, minimal, modern shell"/>
         <Meta
             name="description"
-            content="swagsh, a sleek, high-performance Linux shell built in Rust. Pipelines, expansions, job control, and tab completion, with a startup cost measured in microseconds."
+            content="swagsh, a fast, minimal, modern Linux shell built in Rust. Shell grammar, expansions, tab completion, job control, a customisable prompt and persistent history."
         />
         <div class="page swagsh">
             <div class="bg-grid" aria-hidden="true"></div>
@@ -51,10 +51,9 @@ pub fn Swagsh() -> impl IntoView {
                                 <span class="a-caret" aria-hidden="true"></span>
                             </p>
                             <p class="hero-sub">
-                                "a sleek, high-performance linux shell built in rust. real "
-                                "shell grammar, full expansions, job control and tab completion "
-                                "with a startup cost measured in microseconds. the name is "
-                                "swag, for stylish flair."
+                                "a fast, minimal, modern linux shell built in rust. real shell "
+                                "grammar, full expansions, job control, tab completion and a "
+                                "customisable prompt. the name is swag, for stylish flair."
                             </p>
                             <div class="hero-links">
                                 <a class="btn primary" href="#install">"get started"</a>
@@ -99,28 +98,27 @@ pub fn Swagsh() -> impl IntoView {
                         <span class="hash">"## "</span>"a real shell. "<em>"no surprises."</em>
                     </h2>
                     <div class="cards">
-                        <Feature icon="⚡" title="fast">
-                            "rust's safety with a startup cost measured in microseconds. fast "
-                            "enough that it gets out of your way."
+                        <Feature icon="🧩" title="shell grammar">
+                            "pipelines, redirections, control flow, functions, subshells and "
+                            "here-documents."
                         </Feature>
-                        <Feature icon="🧩" title="real shell grammar">
-                            "the posix constructs you reach for every day: pipelines, "
-                            "redirections, substitutions, control flow, functions and subshells."
-                        </Feature>
-                        <Feature icon="🔤" title="full expansions">
-                            "variable, parameter, tilde and glob expansion, with sensible "
-                            "defaults built in."
+                        <Feature icon="🔤" title="expansions">
+                            "variable, parameter, tilde, glob and command substitution."
                         </Feature>
                         <Feature icon="⌨" title="tab completion">
                             "completes builtins, aliases, executables and filenames out of the box."
                         </Feature>
                         <Feature icon="🧵" title="job control">
                             "background jobs, foreground and background switching, stopping and "
-                            "signalling, all the essentials."
+                            "signalling."
                         </Feature>
-                        <Feature icon="🎛" title="configurable">
-                            "config and profile files, a customizable prompt, and persistent "
-                            "history. set it up the way you like."
+                        <Feature icon="🎛" title="prompt">
+                            "a customisable "<code>"$PS1"</code>" with escape sequences for the "
+                            "working directory, user, host and more."
+                        </Feature>
+                        <Feature icon="🕘" title="history">
+                            "persistent history that respects "<code>"$HISTFILE"</code>" and "
+                            <code>"$HISTSIZE"</code>", with a private mode."
                         </Feature>
                     </div>
                 </section>
@@ -135,17 +133,16 @@ pub fn Swagsh() -> impl IntoView {
                         "measured with "<code>"hyperfine --shell=none"</code>" on linux x86-64."
                     </p>
                     <div class="a-why-grid">
-                        <WhyItem title="within ~10% of dash">
-                            "on pure builtins, swagsh runs within about 10% of dash, the "
-                            "irreducible gap between rust's startup and a bare c binary."
+                        <WhyItem title="dash-class">
+                            "across builtins, variable expansion, conditionals, loops and "
+                            "function calls, swagsh delivers dash-class performance."
                         </WhyItem>
-                        <WhyItem title="~37% faster than bash">
-                            "on those same builtins, swagsh is roughly a third faster than bash, "
-                            "with a startup floor in the hundreds of microseconds."
+                        <WhyItem title="~40% faster than bash">
+                            "on those same workloads, swagsh is about 40% faster than bash."
                         </WhyItem>
-                        <WhyItem title="the gap shrinks under load">
-                            "on fork+exec workloads, the commands you actually run, the "
-                            "difference to bash narrows to a few percent."
+                        <WhyItem title="~25% faster on pipelines">
+                            "on pipelines, where process-spawn overhead dominates and the shell "
+                            "layer matters less, it's about 25% faster than bash."
                         </WhyItem>
                     </div>
                 </section>
@@ -173,9 +170,7 @@ pub fn Swagsh() -> impl IntoView {
                         </div>
                     </div>
                     <p class="a-note">
-                        "swagsh is under active development, so don't replace "
-                        <code>"/bin/sh"</code>" with it without thorough testing. run "
-                        <code>"swagsh --help"</code>" for the full command set."
+                        "run "<code>"swagsh --help"</code>" for the full option set."
                     </p>
                 </section>
 

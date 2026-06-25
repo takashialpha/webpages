@@ -51,9 +51,9 @@ pub fn Audium() -> impl IntoView {
                                 <span class="a-caret" aria-hidden="true"></span>
                             </p>
                             <p class="hero-sub">
-                                "a keyboard-driven music player for people who live in the "
-                                "terminal. no electron. no cloud sync. no background daemons. "
-                                "no ffmpeg. your files, your library, your rules."
+                                "a terminal music app: keyboard-driven, for people who live in "
+                                "the command line. no electron. no cloud sync. no background "
+                                "daemons. no ffmpeg. your files, your library, your rules."
                             </p>
                             <div class="hero-links">
                                 <a class="btn primary" href="#install">"get started"</a>
