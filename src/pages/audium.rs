@@ -54,6 +54,8 @@ pub fn Audium() -> impl IntoView {
                         <img
                             src="https://raw.githubusercontent.com/takashialpha/audium/main/audium-demo.gif"
                             alt="audium running in a terminal"
+                            width="2016"
+                            height="1052"
                             loading="lazy"
                         />
                     </div>

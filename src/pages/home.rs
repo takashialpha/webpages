@@ -21,6 +21,7 @@ pub fn HomePage() -> impl IntoView {
         <JsonLd json=WEBSITE_LD/>
         <section class="landing">
             <div class="landing-inner">
+                <h1 class="sr-only">"takashialpha"</h1>
                 <p class="landing-prompt">
                     <span class="path">"~"</span>
                     <span class="sep">" $ "</span>
