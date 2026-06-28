@@ -32,7 +32,6 @@ export LEPTOS_OUTPUT_NAME="webpages"
 export LEPTOS_SITE_ROOT="site"
 export LEPTOS_SITE_PKG_DIR="pkg"
 export LEPTOS_SITE_ADDR="[::1]:3000"
-export LEPTOS_RELOAD_PORT="3001"
 ```
 
 and run the binary.
