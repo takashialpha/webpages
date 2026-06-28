@@ -94,6 +94,14 @@ html, body {
 
 a { color: inherit; text-decoration: none; }
 
+/* Visible keyboard-focus ring, using the prompt accent against the dark UI.
+   No border-radius here: it would reshape the focused element; browsers already
+   round the outline to follow each element's own radius. */
+:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+}
+
 /* Visually hidden, still exposed to assistive tech and crawlers. */
 .sr-only {
   position: absolute;
@@ -282,6 +290,8 @@ a { color: inherit; text-decoration: none; }
 /* typewriter */
 .tw { display: inline-flex; align-items: center; }
 .tw-text { color: var(--subtext1); }
+/* Static fallback for reduced-motion; the animated span shows otherwise. */
+.tw-static { display: none; color: var(--subtext1); }
 .tw-caret {
   display: inline-block;
   width: 0.62ch;
@@ -689,4 +699,7 @@ em { color: var(--teal); font-style: italic; }
     scroll-behavior: auto !important;
   }
   .reveal { opacity: 1; transform: none; }
+  /* Swap the JS typewriter for its static first phrase. */
+  .tw-text, .tw-caret { display: none; }
+  .tw-static { display: inline; }
 }

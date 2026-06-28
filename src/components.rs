@@ -27,6 +27,7 @@ pub fn Seo(
 
         <Meta property="og:type" content=og_type/>
         <Meta property="og:site_name" content="takashialpha"/>
+        <Meta property="og:locale" content="en_US"/>
         <Meta property="og:title" content=title/>
         <Meta property="og:description" content=description/>
         <Meta property="og:url" content=url/>

@@ -12,7 +12,7 @@ pub fn Swagsh() -> impl IntoView {
     view! {
         <Seo
             title="swagsh"
-            description="swagsh, a fast, minimal, modern Linux shell built in Rust. Shell grammar, expansions, tab completion, job control, a customisable prompt and persistent history."
+            description="A fast, minimal, modern Linux shell. Named after swag, slang for stylish flair."
             path="/swagsh"
         />
         <JsonLd json=APP_LD/>

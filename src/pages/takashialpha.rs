@@ -16,8 +16,6 @@ const PROFILE_LD: &str = include_str!("../../schema/profile.json");
 fn Typewriter(phrases: Vec<&'static str>) -> impl IntoView {
     /// Delay between ticks.
     const TICK: Duration = Duration::from_millis(55);
-    /// Ticks to wait before typing a phrase's first character.
-    const START_PAUSE: u32 = 6;
     /// Ticks to hold a fully typed phrase before deleting it.
     const HOLD_PAUSE: u32 = 36;
     /// Ticks to wait after deleting before starting the next phrase.
@@ -31,16 +29,21 @@ fn Typewriter(phrases: Vec<&'static str>) -> impl IntoView {
         typing: bool,
     }
 
-    let displayed = RwSignal::new(String::new());
+    // Render the first phrase on the server so the tagline is present without JS
+    // and for crawlers; the client progressively enhances it into the cycle.
+    let first = phrases.first().copied().unwrap_or_default();
+    let displayed = RwSignal::new(first.to_string());
 
     // Effects only run on the client, so the interval never touches SSR.
     Effect::new(move |_| {
         let phrases = phrases.clone();
+        // Start from the fully-shown first phrase (matching the server render),
+        // so the cycle continues seamlessly instead of retyping from blank.
         let cursor = RefCell::new(Cursor {
             phrase: 0,
-            shown: 0,
-            pause: START_PAUSE,
-            typing: true,
+            shown: first.chars().count(),
+            pause: HOLD_PAUSE,
+            typing: false,
         });
 
         set_interval(
@@ -76,6 +79,9 @@ fn Typewriter(phrases: Vec<&'static str>) -> impl IntoView {
 
     view! {
         <span class="tw">
+            // Static fallback shown only under prefers-reduced-motion (main.css);
+            // the animated span and caret are hidden in that case.
+            <span class="tw-static">{first}</span>
             <span class="tw-text">{move || displayed.get()}</span>
             <span class="tw-caret" aria-hidden="true"></span>
         </span>
