@@ -628,7 +628,7 @@ em { color: var(--teal); font-style: italic; }
 .a-hero { display: grid; gap: 1.4rem; margin-bottom: clamp(2rem, 6vw, 3.5rem); }
 /* demo session output lines */
 .out { margin: 0; color: var(--subtext0); font-size: 0.86rem; }
-.a-demo img { display: block; width: 100%; height: auto; }
+.a-demo img, .a-demo video { display: block; width: 100%; height: auto; }
 .hero-sub { max-width: 56ch; margin: 0.9rem 0 1.5rem; color: var(--subtext0); font-size: 0.98rem; }
 .a-caret {
   display: inline-block;

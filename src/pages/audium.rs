@@ -51,13 +51,24 @@ pub fn Audium() -> impl IntoView {
 
                     <div class="term a-demo">
                         <TermBar title="~/.local/share/audium"/>
-                        <img
-                            src="https://raw.githubusercontent.com/takashialpha/audium/main/audium-demo.gif"
-                            alt="audium running in a terminal"
+                        // Served via jsDelivr (proper video/mp4 + range support);
+                        // raw.githubusercontent sends octet-stream + nosniff, which
+                        // browsers refuse to play.
+                        <video
+                            src="https://cdn.jsdelivr.net/gh/takashialpha/audium@main/audium-demo.mp4"
                             width="2016"
                             height="1052"
-                            loading="lazy"
-                        />
+                            autoplay
+                            loop
+                            muted
+                            playsinline
+                            preload="metadata"
+                            aria-label="audium running in a terminal"
+                        >
+                            <a href="https://github.com/takashialpha/audium" target="_blank" rel="noreferrer">
+                                "watch the audium demo"
+                            </a>
+                        </video>
                     </div>
                 </header>
 
