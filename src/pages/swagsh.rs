@@ -1,18 +1,21 @@
 //! `/swagsh`, landing page for the shell.
 
 use leptos::prelude::*;
-use leptos_meta::{Meta, Title};
 
-use crate::components::{BackNav, Feature, Footer, PromptLine, TermBar, WhyItem};
+use crate::components::{BackNav, Feature, Footer, JsonLd, PromptLine, Seo, TermBar, WhyItem};
+
+/// schema.org `SoftwareApplication` entity for swagsh.
+const APP_LD: &str = include_str!("../../schema/swagsh.json");
 
 #[component]
 pub fn Swagsh() -> impl IntoView {
     view! {
-        <Title text="swagsh, a fast, minimal, modern shell"/>
-        <Meta
-            name="description"
-            content="swagsh, a fast, minimal, modern Linux shell built in Rust. Shell grammar, expansions, tab completion, job control, a customisable prompt and persistent history."
+        <Seo
+            title="swagsh"
+            description="swagsh, a fast, minimal, modern Linux shell built in Rust. Shell grammar, expansions, tab completion, job control, a customisable prompt and persistent history."
+            path="/swagsh"
         />
+        <JsonLd json=APP_LD/>
         <div class="page swagsh">
             <div class="bg-grid" aria-hidden="true"></div>
             <div class="bg-glow" aria-hidden="true"></div>

@@ -1,7 +1,55 @@
 //! Small presentational components shared across pages.
 
 use leptos::prelude::*;
+use leptos_meta::{Link, Meta, Title};
 use leptos_router::components::A;
+
+use crate::SITE_URL;
+
+/// Per-page SEO head tags: title, description, canonical URL, and the
+/// Open Graph / Twitter card block. `path` is the page's route (e.g.
+/// `/audium`), empty for the home page. `og_type` is the Open Graph object
+/// type, defaulting to `website`; person pages should pass `profile`.
+#[component]
+pub fn Seo(
+    title: &'static str,
+    description: &'static str,
+    path: &'static str,
+    #[prop(default = "website")] og_type: &'static str,
+) -> impl IntoView {
+    let url = format!("{SITE_URL}{path}");
+    let image = format!("{SITE_URL}/og.png");
+    let alt = "takashialpha terminal-style banner";
+    view! {
+        <Title text=title/>
+        <Meta name="description" content=description/>
+        <Link rel="canonical" href=url.clone()/>
+
+        <Meta property="og:type" content=og_type/>
+        <Meta property="og:site_name" content="takashialpha"/>
+        <Meta property="og:title" content=title/>
+        <Meta property="og:description" content=description/>
+        <Meta property="og:url" content=url/>
+        <Meta property="og:image" content=image.clone()/>
+        <Meta property="og:image:width" content="1200"/>
+        <Meta property="og:image:height" content="630"/>
+        <Meta property="og:image:type" content="image/png"/>
+        <Meta property="og:image:alt" content=alt/>
+
+        <Meta name="twitter:card" content="summary_large_image"/>
+        <Meta name="twitter:title" content=title/>
+        <Meta name="twitter:description" content=description/>
+        <Meta name="twitter:image" content=image/>
+        <Meta name="twitter:image:alt" content=alt/>
+    }
+}
+
+/// Emits a `<script type="application/ld+json">` block of structured data.
+/// `inner_html` keeps the JSON raw, since script content is not HTML-decoded.
+#[component]
+pub fn JsonLd(json: &'static str) -> impl IntoView {
+    view! { <script type="application/ld+json" inner_html=json></script> }
+}
 
 /// Terminal-style "back to index" link shown at the top of every sub-page.
 #[component]

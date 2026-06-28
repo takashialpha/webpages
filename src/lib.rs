@@ -6,6 +6,10 @@ pub mod app;
 pub mod components;
 pub mod pages;
 
+/// Canonical origin of the deployed site. Used to build absolute URLs for
+/// canonical links, Open Graph tags, and the sitemap.
+pub const SITE_URL: &str = "https://takashialpha.com";
+
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate() {

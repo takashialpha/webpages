@@ -2,9 +2,6 @@
 #![recursion_limit = "256"]
 
 #[cfg(feature = "ssr")]
-const BASE_URL: &str = "https://takashialpha.com";
-
-#[cfg(feature = "ssr")]
 fn build_sitemap(routes: &[leptos_axum::AxumRouteListing]) -> String {
     // Every route is a static, ASCII path segment, so the `<loc>` values need no
     // XML escaping or percent-encoding. Revisit if a route ever carries `&`,
@@ -19,7 +16,7 @@ fn build_sitemap(routes: &[leptos_axum::AxumRouteListing]) -> String {
             continue;
         }
         xml.push_str("<url><loc>");
-        xml.push_str(BASE_URL);
+        xml.push_str(webpages::SITE_URL);
         if !path.is_empty() {
             xml.push('/');
             xml.push_str(path);

@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use leptos_meta::{Link, MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{Link, MetaTags, Stylesheet, provide_meta_context};
 use leptos_router::{
     StaticSegment,
     components::{Route, Router, Routes},
@@ -50,8 +50,6 @@ pub fn App() -> impl IntoView {
         <Link rel="icon" type_="image/png" sizes="16x16" href="/favicon-16x16.png"/>
         <Link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"/>
         <Link rel="manifest" href="/site.webmanifest"/>
-
-        <Title text="webpages"/>
 
         <Router>
             <main>

@@ -1,18 +1,21 @@
 //! `/audium`, landing page for the terminal music player.
 
 use leptos::prelude::*;
-use leptos_meta::{Meta, Title};
 
-use crate::components::{BackNav, Feature, Footer, PromptLine, TermBar, WhyItem};
+use crate::components::{BackNav, Feature, Footer, JsonLd, PromptLine, Seo, TermBar, WhyItem};
+
+/// schema.org `SoftwareApplication` entity for audium.
+const APP_LD: &str = include_str!("../../schema/audium.json");
 
 #[component]
 pub fn Audium() -> impl IntoView {
     view! {
-        <Title text="audium, terminal music player"/>
-        <Meta
-            name="description"
-            content="A keyboard-driven music player that lives in your terminal. No Electron. No cloud. Just audio."
+        <Seo
+            title="audium"
+            description="A keyboard-driven music player that lives in your terminal. No Electron. No cloud. Just audio."
+            path="/audium"
         />
+        <JsonLd json=APP_LD/>
         <div class="page audium">
             <div class="bg-grid" aria-hidden="true"></div>
             <div class="bg-glow" aria-hidden="true"></div>

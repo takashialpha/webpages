@@ -4,9 +4,12 @@ use std::cell::RefCell;
 use std::time::Duration;
 
 use leptos::prelude::*;
-use leptos_meta::Title;
 
-use crate::components::{BackNav, Footer, PromptLine, TermBar};
+use crate::components::{BackNav, Footer, JsonLd, PromptLine, Seo, TermBar};
+
+/// schema.org `ProfilePage` whose `mainEntity` is the site owner. This is the
+/// page actually about the person, so the entity lives here.
+const PROFILE_LD: &str = include_str!("../../schema/profile.json");
 
 /// A client-side typewriter that cycles through phrases, char by char.
 #[component]
@@ -104,7 +107,13 @@ fn ProjectRow(
 #[component]
 pub fn Takashialpha() -> impl IntoView {
     view! {
-        <Title text="takashialpha, systems dev"/>
+        <Seo
+            title="whoami · takashialpha"
+            description="systems-minded developer who lives in the terminal. low-level Rust, clean abstractions, and tools that feel good the second you run them."
+            path="/takashialpha"
+            og_type="profile"
+        />
+        <JsonLd json=PROFILE_LD/>
         <div class="page">
             <div class="bg-grid" aria-hidden="true"></div>
             <div class="bg-glow" aria-hidden="true"></div>
