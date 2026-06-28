@@ -3,17 +3,7 @@
 use leptos::prelude::*;
 use leptos_meta::{Meta, Title};
 
-use crate::components::{BackNav, Feature, TermBar};
-
-#[component]
-fn WhyItem(title: &'static str, children: Children) -> impl IntoView {
-    view! {
-        <div class="a-why-item">
-            <h3>{title}</h3>
-            <p>{children()}</p>
-        </div>
-    }
-}
+use crate::components::{BackNav, Feature, Footer, PromptLine, TermBar, WhyItem};
 
 #[component]
 pub fn Audium() -> impl IntoView {
@@ -36,14 +26,7 @@ pub fn Audium() -> impl IntoView {
                     <div class="term">
                         <TermBar title="audium, now playing"/>
                         <div class="term-body">
-                            <p class="line">
-                                <span class="usr">"you"</span>
-                                <span class="at">"@"</span>
-                                <span class="host">"terminal"</span>
-                                <span class="path">" ~ "</span>
-                                <span class="prompt">"$ "</span>
-                                <span class="run">"audium"</span>
-                            </p>
+                            <PromptLine user="you" host="terminal" cmd="audium"/>
                             <h1 class="name">"audium"</h1>
                             <p class="tagline">
                                 <span class="prompt-sm">"// "</span>
@@ -188,12 +171,7 @@ pub fn Audium() -> impl IntoView {
                 </section>
 
                 // ── footer ────────────────────────────────────────────────
-                <footer class="foot reveal">
-                    <span class="prompt">"$ "</span>
-                    <span class="run">"echo "</span>
-                    <span class="str">"\"made for the terminal\""</span>
-                    <span class="caret-static"></span>
-                </footer>
+                <Footer msg="made for the terminal"/>
 
             </div>
         </div>

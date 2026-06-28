@@ -3,17 +3,7 @@
 use leptos::prelude::*;
 use leptos_meta::{Meta, Title};
 
-use crate::components::{BackNav, Feature, TermBar};
-
-#[component]
-fn WhyItem(title: &'static str, children: Children) -> impl IntoView {
-    view! {
-        <div class="a-why-item">
-            <h3>{title}</h3>
-            <p>{children()}</p>
-        </div>
-    }
-}
+use crate::components::{BackNav, Feature, Footer, PromptLine, TermBar, WhyItem};
 
 #[component]
 pub fn Swagsh() -> impl IntoView {
@@ -36,14 +26,7 @@ pub fn Swagsh() -> impl IntoView {
                     <div class="term">
                         <TermBar title="swagsh, ~"/>
                         <div class="term-body">
-                            <p class="line">
-                                <span class="usr">"you"</span>
-                                <span class="at">"@"</span>
-                                <span class="host">"arch"</span>
-                                <span class="path">" ~ "</span>
-                                <span class="prompt">"$ "</span>
-                                <span class="run">"exec swagsh"</span>
-                            </p>
+                            <PromptLine user="you" host="arch" cmd="exec swagsh"/>
                             <h1 class="name">"swagsh"</h1>
                             <p class="tagline">
                                 <span class="prompt-sm">"// "</span>
@@ -175,12 +158,7 @@ pub fn Swagsh() -> impl IntoView {
                 </section>
 
                 // ── footer ────────────────────────────────────────────────
-                <footer class="foot reveal">
-                    <span class="prompt">"$ "</span>
-                    <span class="run">"echo "</span>
-                    <span class="str">"\"stay stylish\""</span>
-                    <span class="caret-static"></span>
-                </footer>
+                <Footer msg="stay stylish"/>
 
             </div>
         </div>

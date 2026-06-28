@@ -1,52 +1,73 @@
 //! `/takashialpha`, personal page.
 
+use std::cell::RefCell;
+use std::time::Duration;
+
 use leptos::prelude::*;
 use leptos_meta::Title;
 
-use crate::components::{BackNav, TermBar};
+use crate::components::{BackNav, Footer, PromptLine, TermBar};
 
 /// A client-side typewriter that cycles through phrases, char by char.
 #[component]
 fn Typewriter(phrases: Vec<&'static str>) -> impl IntoView {
+    /// Delay between ticks.
+    const TICK: Duration = Duration::from_millis(55);
+    /// Ticks to wait before typing a phrase's first character.
+    const START_PAUSE: u32 = 6;
+    /// Ticks to hold a fully typed phrase before deleting it.
+    const HOLD_PAUSE: u32 = 36;
+    /// Ticks to wait after deleting before starting the next phrase.
+    const NEXT_PAUSE: u32 = 4;
+
+    /// Where the typewriter is in its type/hold/delete cycle.
+    struct Cursor {
+        phrase: usize,
+        shown: usize,
+        pause: u32,
+        typing: bool,
+    }
+
     let displayed = RwSignal::new(String::new());
 
     // Effects only run on the client, so the interval never touches SSR.
     Effect::new(move |_| {
-        use std::cell::RefCell;
-        use std::rc::Rc;
-        use std::time::Duration;
-
         let phrases = phrases.clone();
-        // (phrase_idx, char_idx, pause_ticks, typing)
-        let state = Rc::new(RefCell::new((0usize, 0usize, 6i32, true)));
+        let cursor = RefCell::new(Cursor {
+            phrase: 0,
+            shown: 0,
+            pause: START_PAUSE,
+            typing: true,
+        });
 
         set_interval(
             move || {
-                let mut st = state.borrow_mut();
-                if st.2 > 0 {
-                    st.2 -= 1;
+                let mut c = cursor.borrow_mut();
+                if c.pause > 0 {
+                    c.pause -= 1;
                     return;
                 }
-                let chars: Vec<char> = phrases[st.0].chars().collect();
-                if st.3 {
-                    if st.1 < chars.len() {
-                        st.1 += 1;
-                        displayed.set(chars[..st.1].iter().collect());
-                        if st.1 == chars.len() {
-                            st.2 = 36; // hold the finished line
-                            st.3 = false;
+                let phrase = phrases[c.phrase];
+                let len = phrase.chars().count();
+                if c.typing {
+                    if c.shown < len {
+                        c.shown += 1;
+                        displayed.set(phrase.chars().take(c.shown).collect());
+                        if c.shown == len {
+                            c.pause = HOLD_PAUSE;
+                            c.typing = false;
                         }
                     }
-                } else if st.1 > 0 {
-                    st.1 -= 1;
-                    displayed.set(chars[..st.1].iter().collect());
+                } else if c.shown > 0 {
+                    c.shown -= 1;
+                    displayed.set(phrase.chars().take(c.shown).collect());
                 } else {
-                    st.3 = true;
-                    st.0 = (st.0 + 1) % phrases.len();
-                    st.2 = 4;
+                    c.typing = true;
+                    c.phrase = (c.phrase + 1) % phrases.len();
+                    c.pause = NEXT_PAUSE;
                 }
             },
-            Duration::from_millis(55),
+            TICK,
         );
     });
 
@@ -97,14 +118,7 @@ pub fn Takashialpha() -> impl IntoView {
                     <div class="term">
                         <TermBar title="takashialpha@arch: ~"/>
                         <div class="term-body">
-                            <p class="line">
-                                <span class="usr">"takashialpha"</span>
-                                <span class="at">"@"</span>
-                                <span class="host">"arch"</span>
-                                <span class="path">" ~ "</span>
-                                <span class="prompt">"$ "</span>
-                                <span class="run">"whoami"</span>
-                            </p>
+                            <PromptLine user="takashialpha" host="arch" cmd="whoami"/>
                             <h1 class="name">"takashialpha"</h1>
                             <p class="tagline">
                                 <span class="prompt-sm">"// "</span>
@@ -247,12 +261,7 @@ pub fn Takashialpha() -> impl IntoView {
                 </section>
 
                 // ── footer ────────────────────────────────────────────────
-                <footer class="foot reveal">
-                    <span class="prompt">"$ "</span>
-                    <span class="run">"echo "</span>
-                    <span class="str">"\"thanks for stopping by\""</span>
-                    <span class="caret-static"></span>
-                </footer>
+                <Footer msg="thanks for stopping by"/>
 
             </div>
         </div>
