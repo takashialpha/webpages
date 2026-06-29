@@ -110,6 +110,35 @@ fn ProjectRow(
     }
 }
 
+/// A `label → handle` contact row. With `href` it links out (mailto links open
+/// the mail client, so they get no `target`/`rel`); without one it renders as
+/// plain text, for handles with no public profile URL (e.g. discord).
+#[component]
+fn SocialRow(
+    label: &'static str,
+    handle: &'static str,
+    #[prop(optional)] href: Option<&'static str>,
+) -> impl IntoView {
+    let row = move || {
+        view! {
+            <span class="social-label">{label}</span>
+            <span class="social-arrow" aria-hidden="true">"→ "</span>
+            <span class="social-handle">{handle}</span>
+        }
+    };
+    let body = match href {
+        Some(h) if h.starts_with("mailto:") => {
+            view! { <a class="social-link" href=h>{row()}</a> }.into_any()
+        }
+        Some(h) => {
+            view! { <a class="social-link" href=h target="_blank" rel="noreferrer">{row()}</a> }
+                .into_any()
+        }
+        None => view! { <span class="social-link is-static">{row()}</span> }.into_any(),
+    };
+    view! { <li class="social">{body}</li> }
+}
+
 #[component]
 pub fn Takashialpha() -> impl IntoView {
     view! {
@@ -272,6 +301,45 @@ pub fn Takashialpha() -> impl IntoView {
                             <li>"low-level + performance-focused projects"</li>
                             <li>"making things that actually feel good to use"</li>
                         </ul>
+                    </div>
+                </section>
+
+                // ── connect ───────────────────────────────────────────────
+                <section class="block reveal" id="connect">
+                    <h2 class="heading"><span class="hash">"## "</span>"connect"</h2>
+                    <ul class="socials">
+                        <SocialRow
+                            label="github"
+                            handle="@takashialpha"
+                            href="https://github.com/takashialpha"
+                        />
+                        <SocialRow
+                            label="x"
+                            handle="@takashialphax"
+                            href="https://x.com/takashialphax"
+                        />
+                        <SocialRow
+                            label="reddit"
+                            handle="u/takashialpha"
+                            href="https://www.reddit.com/user/takashialpha"
+                        />
+                        <SocialRow
+                            label="email"
+                            handle="takashialpha@protonmail.com"
+                            href="mailto:takashialpha@protonmail.com"
+                        />
+                        // no public profile to link to, so handle only.
+                        <SocialRow label="discord" handle="@takashialpha"/>
+                    </ul>
+                    <div class="sponsor-row">
+                        <a class="btn sponsor" href="https://github.com/sponsors/takashialpha"
+                            target="_blank" rel="noreferrer">
+                            <span class="sponsor-heart" aria-hidden="true">"♥ "</span>
+                            "sponsor"
+                        </a>
+                        <span class="muted sponsor-note">
+                            "if any of this is useful to you."
+                        </span>
                     </div>
                 </section>
 

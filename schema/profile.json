@@ -8,8 +8,13 @@
         "name": "takashialpha",
         "url": "https://takashialpha.com",
         "jobTitle": "Systems Developer",
+        "email": "takashialpha@protonmail.com",
         "knowsAbout": ["Rust", "Linux", "Systems programming", "Terminal applications"],
-        "sameAs": ["https://github.com/takashialpha"]
+        "sameAs": [
+          "https://github.com/takashialpha",
+          "https://x.com/takashialphax",
+          "https://www.reddit.com/user/takashialpha"
+        ]
       }
     },
     {
