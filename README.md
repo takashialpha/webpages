@@ -1,6 +1,10 @@
 # my webpages
 
-uses a [Leptos](https://github.com/leptos-rs/leptos) and [Axum](https://github.com/tokio-rs/axum) stack.
+[![live at takashialpha.com](https://img.shields.io/badge/live-takashialpha.com-a6e3a1?style=flat-square&labelColor=11111b)](https://takashialpha.com)
+[![Leptos](https://img.shields.io/badge/Leptos-ef3939?style=flat-square&labelColor=11111b)](https://github.com/leptos-rs/leptos)
+[![Axum](https://img.shields.io/badge/Axum-cba6f7?style=flat-square&labelColor=11111b)](https://github.com/tokio-rs/axum)
+
+My personal site, served live at **[takashialpha.com](https://takashialpha.com)**. A server-rendered Rust app built on a [Leptos](https://github.com/leptos-rs/leptos) and [Axum](https://github.com/tokio-rs/axum) stack, with hydration on the client.
 
 ## Prerequisites
 

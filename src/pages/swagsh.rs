@@ -29,7 +29,7 @@ pub fn Swagsh() -> impl IntoView {
                     <div class="term">
                         <TermBar title="swagsh, ~"/>
                         <div class="term-body">
-                            <PromptLine user="you" host="arch" cmd="exec swagsh"/>
+                            <PromptLine user="you" host="arch" cmd="swagsh"/>
                             <h1 class="name">"swagsh"</h1>
                             <p class="tagline">
                                 <span class="prompt-sm">"// "</span>
