@@ -38,8 +38,8 @@ pub fn Swagsh() -> impl IntoView {
                             </p>
                             <p class="hero-sub">
                                 "a fast, minimal, modern linux shell built in rust. real shell "
-                                "grammar, full expansions, job control, tab completion and a "
-                                "customisable prompt. the name is swag, for stylish flair."
+                                "grammar, full expansions, job control, readline-style editing "
+                                "and a customisable prompt. the name is swag, for stylish flair."
                             </p>
                             <div class="hero-links">
                                 <a class="btn primary" href="#install">"get started"</a>
@@ -53,24 +53,24 @@ pub fn Swagsh() -> impl IntoView {
                         <TermBar title="swagsh, session"/>
                         <div class="term-body">
                             <p class="line">
-                                <span class="path">"~ "</span><span class="prompt">"$ "</span>
+                                <span class="path">"~ "</span><span class="prompt">"❯ "</span>
                                 <span class="run">"for i in 1 2 3; do echo \"line $i\"; done"</span>
                             </p>
                             <p class="out">"line 1"</p>
                             <p class="out">"line 2"</p>
                             <p class="out">"line 3"</p>
                             <p class="line">
-                                <span class="path">"~ "</span><span class="prompt">"$ "</span>
+                                <span class="path">"~ "</span><span class="prompt">"❯ "</span>
                                 <span class="run">"name=takashi; echo \"hi, ${name}\""</span>
                             </p>
                             <p class="out">"hi, takashi"</p>
                             <p class="line">
-                                <span class="path">"~ "</span><span class="prompt">"$ "</span>
+                                <span class="path">"~ "</span><span class="prompt">"❯ "</span>
                                 <span class="run">"cat log | grep err | wc -l"</span>
                             </p>
                             <p class="out">"7"</p>
                             <p class="line">
-                                <span class="path">"~ "</span><span class="prompt">"$ "</span>
+                                <span class="path">"~ "</span><span class="prompt">"❯ "</span>
                                 <span class="a-caret" aria-hidden="true"></span>
                             </p>
                         </div>
@@ -89,10 +89,11 @@ pub fn Swagsh() -> impl IntoView {
                             "here-documents."
                         </Feature>
                         <Feature icon="🔤" title="expansions">
-                            "variable, parameter, tilde, glob and command substitution."
+                            "variable, parameter, tilde, glob, arithmetic and command substitution."
                         </Feature>
-                        <Feature icon="⌨" title="tab completion">
-                            "completes builtins, aliases, executables and filenames out of the box."
+                        <Feature icon="⌨" title="line editing">
+                            "readline-style editing out of the box: arrow-key recall, "
+                            "emacs-style keybindings, "<code>"Ctrl-R"</code>" history search."
                         </Feature>
                         <Feature icon="🧵" title="job control">
                             "background jobs, foreground and background switching, stopping and "
@@ -116,19 +117,22 @@ pub fn Swagsh() -> impl IntoView {
                         <span class="hash">"## "</span>"fast where it counts"
                     </h2>
                     <p class="a-lede">
-                        "measured with "<code>"hyperfine --shell=none"</code>" on linux x86-64."
+                        "measured with "<code>"hyperfine --shell=none"</code>" on linux x86-64, "
+                        "across loops, expansions, pattern matching and process spawning."
                     </p>
                     <div class="a-why-grid">
-                        <WhyItem title="dash-class">
-                            "across builtins, variable expansion, conditionals, loops and "
-                            "function calls, swagsh delivers dash-class performance."
+                        <WhyItem title="up to 6.6x faster than bash">
+                            "on recursive function calls and tight loops, swagsh leaves bash "
+                            "far behind."
                         </WhyItem>
-                        <WhyItem title="~40% faster than bash">
-                            "on those same workloads, swagsh is about 40% faster than bash."
+                        <WhyItem title="2-3.6x across the board">
+                            "parameter expansion, pattern matching, function calls, conditionals: "
+                            "all comfortably ahead of bash."
                         </WhyItem>
-                        <WhyItem title="~25% faster on pipelines">
-                            "on pipelines, where process-spawn overhead dominates and the shell "
-                            "layer matters less, it's about 25% faster than bash."
+                        <WhyItem title="keeps pace with dash">
+                            "dash is hand-tuned c with no interpreter overhead to shave, and "
+                            "swagsh still matches or beats it on loops, pattern matching and "
+                            "recursion."
                         </WhyItem>
                     </div>
                 </section>
