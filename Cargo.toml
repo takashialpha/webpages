@@ -2,7 +2,7 @@
 name = "webpages"
 version = "0.0.0"      # should not be versioned. tags/releases are not published; latest is always in main. 
 edition = "2024"
-license = "Apache-2.0"
+license = "AGPL-3.0-or-later"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
