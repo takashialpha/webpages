@@ -1,6 +1,6 @@
 [package]
 name = "webpages"
-version = "0.0.0"      # should not be versioned. tags/releases are not published; latest is always in main.
+version = "0.0.0"                                                  # should not be versioned. tags/releases are not published; latest is always in main.
 edition = "2024"
 description = "My personal site, served live at takashialpha.com."
 repository = "https://github.com/takashialpha/webpages"
