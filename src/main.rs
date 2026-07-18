@@ -29,14 +29,14 @@ fn build_sitemap(routes: &[leptos_axum::AxumRouteListing]) -> String {
 
 #[cfg(feature = "ssr")]
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use axum::Router;
     use axum::routing::get;
     use leptos::prelude::*;
     use leptos_axum::{LeptosRoutes, generate_route_list};
-    use webpages::app::*;
+    use webpages::app::{App, shell};
 
-    let conf = get_configuration(None).unwrap();
+    let conf = get_configuration(None)?;
     let addr = conf.leptos_options.site_addr;
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
@@ -57,10 +57,9 @@ async fn main() {
         .fallback(leptos_axum::file_and_error_handler(shell))
         .with_state(leptos_options);
 
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app.into_make_service())
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    axum::serve(listener, app.into_make_service()).await?;
+    Ok(())
 }
 
 #[cfg(not(feature = "ssr"))]

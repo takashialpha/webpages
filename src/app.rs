@@ -10,6 +10,7 @@ use crate::pages::home::{HomePage, NotFound};
 use crate::pages::swagsh::Swagsh;
 use crate::pages::takashialpha::Takashialpha;
 
+#[must_use]
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
         <!DOCTYPE html>
