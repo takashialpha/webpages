@@ -4,8 +4,10 @@
     {
       "@type": "SoftwareApplication",
       "name": "audium",
+      "description": "A terminal music app.",
       "applicationCategory": "MultimediaApplication",
       "operatingSystem": "Linux",
+      "softwareVersion": "2.0.0",
       "url": "https://takashialpha.com/audium",
       "author": {
         "@type": "Person",

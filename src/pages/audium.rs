@@ -12,7 +12,7 @@ pub fn Audium() -> impl IntoView {
     view! {
         <Seo
             title="audium"
-            description="A keyboard-driven music player that lives in your terminal. No Electron. No cloud. Just audio."
+            description="A terminal music app. Keyboard-driven, no Electron, no cloud, no daemons. Just your files."
             path="/audium"
         />
         <JsonLd json=APP_LD/>
@@ -27,19 +27,19 @@ pub fn Audium() -> impl IntoView {
                 // ── hero ──────────────────────────────────────────────────
                 <header class="a-hero reveal">
                     <div class="term">
-                        <TermBar title="audium, now playing"/>
+                        <TermBar title="audium"/>
                         <div class="term-body">
                             <PromptLine user="you" host="terminal" cmd="audium"/>
                             <h1 class="name">"audium"</h1>
                             <p class="tagline">
                                 <span class="prompt-sm">"// "</span>
-                                "music that lives in your terminal"
+                                "a terminal music app"
                                 <span class="a-caret" aria-hidden="true"></span>
                             </p>
                             <p class="hero-sub">
-                                "a terminal music app: keyboard-driven, for people who live in "
-                                "the command line. no electron. no cloud sync. no background "
-                                "daemons. no ffmpeg. your files, your library, your rules."
+                                "your music, played from the keyboard, in the window you already "
+                                "have open. no electron, no cloud, nothing running in the "
+                                "background. just your files."
                             </p>
                             <div class="hero-links">
                                 <a class="btn primary" href="#install">"get started"</a>
@@ -50,14 +50,15 @@ pub fn Audium() -> impl IntoView {
                     </div>
 
                     <div class="term a-demo">
-                        <TermBar title="~/.local/share/audium"/>
+                        <TermBar title="audium, demo"/>
                         // Served via jsDelivr (proper video/mp4 + range support);
                         // raw.githubusercontent sends octet-stream + nosniff, which
-                        // browsers refuse to play.
+                        // browsers refuse to play. Pinned to the release tag so a
+                        // new demo is a new URL rather than a stale CDN cache entry.
                         <video
-                            src="https://cdn.jsdelivr.net/gh/takashialpha/audium@main/audium-demo.mp4"
-                            width="2016"
-                            height="1052"
+                            src="https://cdn.jsdelivr.net/gh/takashialpha/audium@v2.0.0/audium-demo.mp4"
+                            width="1280"
+                            height="740"
                             autoplay
                             loop
                             muted
@@ -72,31 +73,6 @@ pub fn Audium() -> impl IntoView {
                     </div>
                 </header>
 
-                // ── install ───────────────────────────────────────────────
-                <section class="a-section reveal" id="install">
-                    <p class="a-label">"installation"</p>
-                    <h2 class="heading"><span class="hash">"## "</span>"pick your platform"</h2>
-                    <div class="cards">
-                        <div class="card">
-                            <p class="a-cmd-title">"cargo (all platforms)"</p>
-                            <code class="a-code">"cargo install audium"</code>
-                            <p class="a-comment">"# requires rust (edition 2024)"</p>
-                        </div>
-                        <div class="card">
-                            <p class="a-cmd-title">"aur (arch linux)"</p>
-                            <code class="a-code">"paru -S audium"</code>
-                            <p class="a-comment">"# or yay, or manually with makepkg"</p>
-                        </div>
-                    </div>
-                    <p class="a-note">
-                        "audium targets linux exclusively and uses alsa, the standard linux "
-                        "audio api, its development headers are needed to build, see the "
-                        <a href="https://github.com/takashialpha/audium#building-from-source"
-                            target="_blank" rel="noreferrer">"readme"</a>
-                        " for distro-specific instructions."
-                    </p>
-                </section>
-
                 // ── features ──────────────────────────────────────────────
                 <section class="a-section reveal" id="features">
                     <p class="a-label">"features"</p>
@@ -104,43 +80,30 @@ pub fn Audium() -> impl IntoView {
                         <span class="hash">"## "</span>"everything you need. "<em>"nothing you don't."</em>
                     </h2>
                     <div class="cards">
-                        <Feature icon="♪" title="format agnostic">
-                            "plays MP3, FLAC, OGG, WAV, AAC, M4A, Opus, AIFF and more via "
-                            "Symphonia, with no FFmpeg required."
+                        <Feature icon="♪" title="plays everything">
+                            "mp3, flac, ogg, wav, aac, m4a, aiff and more, straight out of the "
+                            "box. no ffmpeg, no codec packs, nothing to configure."
                         </Feature>
-                        <Feature icon="⌨" title="keyboard-driven">
-                            "built to be driven entirely from the keyboard, for people who live "
-                            "in the terminal and never reach for the mouse. press "
-                            <code>"?"</code>" anytime to see every keybinding."
+                        <Feature icon="⌨" title="all keyboard">
+                            "every action is a keystroke, for people who never reach for the "
+                            "mouse. press "<code>"?"</code>" at any time for the full map."
                         </Feature>
-                        <Feature icon="🏷" title="library & metadata">
-                            "import your files and audium reads artist, album, year and genre "
-                            "from their tags automatically, all editable in-app."
-                        </Feature>
-                        <Feature icon="🎤" title="lyrics">
-                            "store plain or synced lyrics per track, with an overlay that "
-                            "follows along as the song plays."
-                        </Feature>
-                        <Feature icon="🎨" title="themes">
-                            "15 built-in themes including nord, gruvbox, catppuccin, rosé pine, "
-                            "dracula and tokyo night. switch live, with transparency support."
+                        <Feature icon="🎨" title="looks right anywhere">
+                            "15 themes, nord, gruvbox, catppuccin, rosé pine, dracula, tokyo "
+                            "night and friends, switched live. drop into a bare tty and it "
+                            "adapts on its own."
                         </Feature>
                         <Feature icon="🎵" title="playlists & queue">
-                            "build playlists, shuffle them into the queue, and loop a single "
-                            "track or the whole thing."
+                            "your collection and your playlists sit side by side. queue either "
+                            "one, shuffle it, loop a track or the lot."
                         </Feature>
-                        <Feature icon="⚡" title="playback control">
-                            "filter your library as you type, adjust playback speed, and seek "
-                            "freely."
+                        <Feature icon="🎤" title="lyrics">
+                            "plain or synced lyrics per track, with an overlay that follows "
+                            "along line by line while the song plays."
                         </Feature>
-                        <Feature icon="🔊" title="threaded audio">
-                            "playback runs on its own thread, so the interface never stutters "
-                            "your music."
-                        </Feature>
-                        <Feature icon="💾" title="it's your library">
-                            "stored at "<code>"$XDG_DATA_HOME/audium/library.json"</code>", plain "
-                            "JSON, human-readable, editable by hand. audium doesn't rename your "
-                            "files, doesn't embed metadata, and never phones home."
+                        <Feature icon="⏯" title="picks up where you left off">
+                            "queue, track and position come back on the next launch, paused, so "
+                            "nothing starts playing until you say so."
                         </Feature>
                     </div>
                 </section>
@@ -152,38 +115,54 @@ pub fn Audium() -> impl IntoView {
                         <span class="hash">"## "</span>"lighter. simpler. "<em>"actually yours."</em>
                     </h2>
                     <p class="a-lede">
-                        "alternatives like termusic ship with heavy dependency trees, FFmpeg "
-                        "requirements, daemon processes, or config formats that take longer to "
-                        "learn than the app itself. audium takes a different approach."
+                        "most music players want to be a platform: an account, a sync service, a "
+                        "config language, half a gigabyte of runtime. audium is a program that "
+                        "plays your songs."
                     </p>
-                    <div class="a-why-grid">
-                        <WhyItem title="no ffmpeg, no daemon">
-                            "one binary. Zero background processes. Symphonia handles every "
-                            "format natively in-process."
+                    <div class="a-why-list">
+                        <WhyItem title="one small binary">
+                            "about 5 mb, no daemon, no background processes, nothing to keep "
+                            "running between sessions. install it and it works."
                         </WhyItem>
-                        <WhyItem title="smaller and faster to build">
-                            "fewer dependencies means shorter compile times and a ~3 MB release "
-                            "binary with no runtime surprises."
+                        <WhyItem title="your files stay yours">
+                            "titles, artists and lyrics live in the tags of your own files, "
+                            "edits included, so they travel with the music and any other player "
+                            "can read them. audium never phones home."
                         </WhyItem>
-                        <WhyItem title="cleaner ui">
-                            "built on ratatui with a layout designed for daily use, not just "
-                            "feature completeness. Panels, queue, progress bar, volume: "
-                            "everything visible at once."
+                        <WhyItem title="nothing to learn">
+                            "no config file to write before you can hear a song. import, press "
+                            "play, and change what you want from inside the app."
                         </WhyItem>
-                        <WhyItem title="modern codebase">
-                            "written in Rust edition 2024. No unsafe, no global state, no "
-                            "legacy baggage."
-                        </WhyItem>
-                        <WhyItem title="plain data, no lock-in">
-                            "your library is a JSON file you can read, edit, back up, or move "
-                            "between machines freely. audium is a tool, not a platform."
-                        </WhyItem>
-                        <WhyItem title="system audio, done right">
-                            "audium plays through your default system output. Switch devices at "
-                            "the OS level and it follows, no in-app device picker that fights "
-                            "your setup."
+                        <WhyItem title="never in your way">
+                            "audio runs on its own thread, so the interface never stutters your "
+                            "music, and playback follows whatever output your system is using."
                         </WhyItem>
                     </div>
+                </section>
+
+                // ── install ───────────────────────────────────────────────
+                <section class="a-section reveal" id="install">
+                    <p class="a-label">"installation"</p>
+                    <h2 class="heading"><span class="hash">"## "</span>"pick your platform"</h2>
+                    <div class="cards">
+                        <div class="card">
+                            <p class="a-cmd-title">"cargo"</p>
+                            <code class="a-code">"cargo install audium --locked"</code>
+                            <p class="a-comment">"# needs the latest stable rust"</p>
+                        </div>
+                        <div class="card">
+                            <p class="a-cmd-title">"aur (arch linux)"</p>
+                            <code class="a-code">"paru -S audium"</code>
+                            <p class="a-comment">"# or yay, or manually with makepkg"</p>
+                        </div>
+                    </div>
+                    <p class="a-note">
+                        "linux only, through alsa. building needs its development headers, see "
+                        "the "
+                        <a href="https://github.com/takashialpha/audium#building-from-source"
+                            target="_blank" rel="noreferrer">"readme"</a>
+                        " for the package name on your distro."
+                    </p>
                 </section>
 
                 // ── footer ────────────────────────────────────────────────

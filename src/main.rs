@@ -63,4 +63,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(not(feature = "ssr"))]
-pub fn main() {}
+pub const fn main() {}
