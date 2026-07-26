@@ -27,6 +27,10 @@ cargo leptos build --release
 
 Produces the server binary in `target/release` and the site assets in `target/site`.
 
+## Pre-built binary
+
+Binary on releases
+
 ## Deploying
 
 After `cargo leptos build --release`, copy the server binary and the `target/site` directory to the target host, then set:
