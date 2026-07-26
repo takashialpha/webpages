@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-leptos
+
+      - run: cargo leptos build --release
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/release/webpages dist/
+          cp -r target/site dist/site
+          tar -C dist -czf webpages-x86_64-linux.tar.gz webpages site
+          sha256sum webpages-x86_64-linux.tar.gz > webpages-x86_64-linux.tar.gz.sha256
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: build
+          name: Latest build
+          body: ${{ github.sha }}
+          files: |
+            webpages-x86_64-linux.tar.gz
+            webpages-x86_64-linux.tar.gz.sha256
