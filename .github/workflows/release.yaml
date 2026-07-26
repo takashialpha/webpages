@@ -1,17 +1,13 @@
 name: Release
-
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: write
-
 concurrency:
   group: release
   cancel-in-progress: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,9 +20,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-leptos
-
       - run: cargo leptos build --release
-
       - name: Package
         run: |
           mkdir -p dist
@@ -34,7 +28,10 @@ jobs:
           cp -r target/site dist/site
           tar -C dist -czf webpages-x86_64-linux.tar.gz webpages site
           sha256sum webpages-x86_64-linux.tar.gz > webpages-x86_64-linux.tar.gz.sha256
-
+      - name: Drop previous rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete build --yes --cleanup-tag || true
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: build
