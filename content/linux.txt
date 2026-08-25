@@ -1,0 +1,3 @@
+my daily driver for years. i know where things live and usually why they broke. right now i run my own fork of niri as my compositor.
+
+i've dug into syscalls, memory management, init, filesystems, context switches..=and more.

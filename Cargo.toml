@@ -12,8 +12,14 @@ license = "AGPL-3.0-or-later"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# The client-side clock, for `date` and `uptime`. wasm32 has no working
+# `SystemTime`, so the browser has to supply it. Already in the tree.
+js-sys = { version = "0", optional = true }
 leptos = { version = "0" }
-leptos_router = { version = "0" }
+# Leptos spawns onto a global executor that `leptos_axum` only installs from
+# its own router helpers, which this binary does not use. Already in the tree
+# via leptos, so declaring it adds no crates.
+any_spawner = { version = "0", features = ["tokio"], optional = true }
 axum = { version = "0", features = ["http2"], optional = true }
 console_error_panic_hook = { version = "0", optional = true }
 leptos_axum = { version = "0", optional = true }
@@ -35,10 +41,20 @@ tracing-subscriber = { version = "0", default-features = false, features = [
   "env-filter",
 ], optional = true }
 wasm-bindgen = { version = "0", optional = true }
+# `Storage` alone, to remember the palette. The rest of web-sys arrives with
+# leptos; this only turns on the one feature that is not already enabled.
+web-sys = { version = "0", features = ["Storage"], optional = true }
 
 [features]
-hydrate = ["leptos/hydrate", "dep:console_error_panic_hook", "dep:wasm-bindgen"]
+hydrate = [
+  "leptos/hydrate",
+  "dep:console_error_panic_hook",
+  "dep:js-sys",
+  "dep:wasm-bindgen",
+  "dep:web-sys",
+]
 ssr = [
+  "dep:any_spawner",
   "dep:axum",
   "dep:tokio",
   "dep:leptos_axum",
@@ -46,7 +62,6 @@ ssr = [
   "dep:tracing-subscriber",
   "leptos/ssr",
   "leptos_meta/ssr",
-  "leptos_router/ssr",
 ]
 
 # A tree this size emits enough DWARF to overflow the 4 GiB range of 32-bit debug

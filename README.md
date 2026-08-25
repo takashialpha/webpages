@@ -4,7 +4,19 @@
 [![Leptos](https://img.shields.io/badge/Leptos-ef3939?style=flat-square&labelColor=11111b)](https://github.com/leptos-rs/leptos)
 [![Axum](https://img.shields.io/badge/Axum-cba6f7?style=flat-square&labelColor=11111b)](https://github.com/tokio-rs/axum)
 
-My personal site, served live at **[takashialpha.com](https://takashialpha.com)**. A server-rendered Rust app built on a [Leptos](https://github.com/leptos-rs/leptos) and [Axum](https://github.com/tokio-rs/axum) stack, with hydration on the client.
+My personal site, served live at **[takashialpha.com](https://takashialpha.com)**. The whole page is a tty: it opens on a login banner and everything past that is typed. A server-rendered Rust app built on [Leptos](https://github.com/leptos-rs/leptos) and [Axum](https://github.com/tokio-rs/axum), hydrated on the client.
+
+There is one route. The server renders the banner, which is also the only thing search engines see, and the shell runs entirely in the browser from there. No command changes the URL.
+
+## Content
+
+Everything the site says lives in `content/` as plain text. `src/fs.rs` maps those files into the tree the shell walks, so adding a section is a new file and one line in `ROOT`, never a new command. `ls`, `cat`, `cd`, and tab completion all read that same tree.
+
+The login banner does not keep its own copy of the intro. It renders the first paragraph of `content/about.txt`, which is also the page's meta description, so there is one place to edit it.
+
+## Commands
+
+`help` lists them, generated from the registry in `src/commands.rs` rather than written out, so it cannot fall behind. Adding a command is one entry in `COMMANDS` and one function.
 
 ## Prerequisites
 
@@ -29,7 +41,7 @@ Produces the server binary in `target/release` and the site assets in `target/si
 
 ## Pre-built binary
 
-Every push to `main` publishes a rolling [`build`](https://github.com/takashialpha/webpages/releases/tag/build) release carrying `webpages-x86_64-linux.tar.gz` and its `.sha256`. The archive holds the server binary next to a `site` directory, already laid out the way the environment variables below expect. There are no version tags; the latest build is always whatever is in `main`.
+Every push to `main` publishes a rolling [`build`](https://github.com/takashialpha/webpages/releases/tag/build) release carrying `webpages-x86_64-linux.tar.gz` and its `.sha256`. The archive holds the server binary next to `hash.txt` and a `site` directory, already laid out the way the environment variables below expect. There are no version tags; the latest build is always whatever is in `main`.
 
 ## Deploying
 
@@ -40,11 +52,12 @@ export LEPTOS_OUTPUT_NAME="webpages"
 export LEPTOS_SITE_ROOT="site"
 export LEPTOS_SITE_PKG_DIR="pkg"
 export LEPTOS_SITE_ADDR="[::1]:3000"
+export LEPTOS_HASH_FILES="true"
 ```
 
 and run the binary.
 
-The server shuts down on SIGINT or SIGTERM. It stops accepting new connections and waits for the requests already in flight to finish before it exits, so a restart never cuts a page off mid render. It exits with a non-zero status if it fails to start, and says why.
+The server shuts down on SIGINT or SIGTERM. It stops accepting new connections and waits for the requests already in flight to finish before it exits, so a restart never cuts a page off mid render. It exits with a non-zero status if it fails to start, and says why. `GET /health` reports uptime and the commit the binary was built from.
 
 ## Logging
 
@@ -61,6 +74,16 @@ Each request then gets a single line with its method, path, status, and how long
 The format follows where stdout goes. Color is used only when stdout is a terminal, and the timestamp is left out when systemd owns stdout, because journald records its own timestamp for every line.
 
 At startup the server also warns about the two ways a deploy can come up looking healthy while serving broken pages: `LEPTOS_SITE_ROOT` not pointing at a directory, and `hash.txt` missing from beside the binary.
+
+## Fonts
+
+The page is set in the IBM VGA 8x16 ROM font, the face a text-mode console and a bios screen actually draw, taken from the [Ultimate Oldschool PC Font Pack](https://int10h.org/oldschool-pc-fonts/) and served as woff2 from `public/fonts/`, about 6 KB. It is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) by VileR; the license text ships alongside it in `public/fonts/vga-LICENSE.txt`.
+
+The cell is 8 wide by 16 tall, so the font is only crisp at multiples of 16px and the type scale is pinned to them: 16px on a phone, 32px from 720px up. There is no fluid sizing anywhere in the stylesheet, and `line-height` is 1 because the cell already is the line. On a 1280x800 screen that works out to exactly 80 columns by 25 rows, which is classic VGA text mode.
+
+There is no bold face, because the ROM font has none. A console fakes bold with a bright color and so does the stylesheet; asking for a weight the font does not have gets you a smeared synthetic bold instead.
+
+The favicons and the social card are generated from this same font rather than drawn by hand, so they cannot drift from how the site looks.
 
 ## License
 

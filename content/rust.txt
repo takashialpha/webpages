@@ -1,0 +1,9 @@
+almost everything i write is rust: low-level code, terminal apps, systems work, and the occasional web thing.
+
+run `ls projects` for what i've built.
+
+i've also spent time in ratatui and servo, and got a few contributions merged into cloudflare foundations.
+
+  ratatui   https://github.com/ratatui/ratatui
+  servo     https://github.com/servo/servo
+  cf found. https://github.com/cloudflare/foundations

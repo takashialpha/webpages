@@ -2437,16 +2437,18 @@ dependencies = [
 name = "webpages"
 version = "0.0.0"
 dependencies = [
+ "any_spawner",
  "axum",
  "console_error_panic_hook",
+ "js-sys",
  "leptos",
  "leptos_axum",
  "leptos_meta",
- "leptos_router",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

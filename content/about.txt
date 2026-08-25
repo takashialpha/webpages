@@ -1,0 +1,3 @@
+i write systems software and spend most of the day in a terminal. low-level work is the part i actually enjoy. linux has been my only os for years now.
+
+i rewrite code i don't like, which turns out to be a lot of code.

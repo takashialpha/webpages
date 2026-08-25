@@ -1,0 +1,3 @@
+i handle the whole network path myself, from backend services out to the client: routing, dns, proxying, and containerized workloads on docker when i need them.
+
+all of it runs on takashialpha.com, which serves my webpages and a few other services.

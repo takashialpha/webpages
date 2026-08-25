@@ -1,0 +1,3 @@
+- building more terminal-first tools
+- low-level and performance work
+- making tools i'd actually want to use myself

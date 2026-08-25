@@ -1,0 +1,1 @@
+i think about design at the system level. if i get the base wrong, everything built on top of it gets worse, so that's where i spend the time.

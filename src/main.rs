@@ -1,34 +1,6 @@
 // See lib.rs: deeply nested view-tree future types overflow the default depth in release.
 #![recursion_limit = "256"]
 
-/// Renders the `/sitemap.xml` body from the router's own route table, so the
-/// sitemap cannot drift from the routes that actually exist.
-#[cfg(feature = "ssr")]
-fn build_sitemap(routes: &[leptos_axum::AxumRouteListing]) -> String {
-    // Every route is a static, ASCII path segment, so the `<loc>` values need no
-    // XML escaping or percent-encoding. Revisit if a route ever carries `&`,
-    // non-ASCII, or other reserved characters.
-    let mut xml = String::from(
-        r#"<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">"#,
-    );
-    for route in routes {
-        let path = route.path().trim_matches('/');
-        // Skip Leptos wildcard (`*`) and dynamic param (`:`) segments.
-        if path.contains('*') || path.contains(':') {
-            continue;
-        }
-        xml.push_str("<url><loc>");
-        xml.push_str(webpages::SITE_URL);
-        if !path.is_empty() {
-            xml.push('/');
-            xml.push_str(path);
-        }
-        xml.push_str("</loc></url>");
-    }
-    xml.push_str("</urlset>");
-    xml
-}
-
 /// Installs the process-wide `tracing` subscriber, formatted for the journal
 /// that captures our stdout: color only when stdout is a terminal, and no
 /// timestamp when journald owns stdout, since it sets `JOURNAL_STREAM` and
@@ -137,11 +109,11 @@ async fn main() -> std::process::ExitCode {
     use axum::middleware::from_fn;
     use axum::routing::get;
     use leptos::config::get_configuration;
-    use leptos_axum::{LeptosRoutes, generate_route_list};
+    use leptos_axum::render_app_to_stream;
     use std::process::ExitCode;
     use tokio::net::TcpListener;
     use tracing::{error, info, warn};
-    use webpages::app::{App, shell};
+    use webpages::app::shell;
 
     // First, so every failure below has somewhere to go. An error here means a
     // subscriber is already installed, which is itself reportable.
@@ -149,6 +121,12 @@ async fn main() -> std::process::ExitCode {
         warn!(%error, "keeping the tracing subscriber already installed");
     }
     init_panic_logging();
+
+    // Leptos renders through a global spawner. `leptos_axum` installs one from
+    // inside its router helpers; serving a single route by hand skips that, and
+    // every render panics on the first spawn. An error means one is already set,
+    // which is equally fine.
+    let _ = any_spawner::Executor::init_tokio();
 
     let conf = match get_configuration(None) {
         Ok(conf) => conf,
@@ -193,10 +171,18 @@ async fn main() -> std::process::ExitCode {
         }
     };
 
-    let routes = generate_route_list(App);
-    // Fixed for the life of the process and read on every hit, so hand the
-    // response body a `&'static str` instead of cloning a `String` per request.
-    let sitemap: &'static str = build_sitemap(&routes).leak();
+    // The site is a single page, so the sitemap is one fixed URL. Built from
+    // `SITE_URL` rather than spelled out again, and leaked because it is read on
+    // every hit and never changes.
+    let sitemap: &'static str = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{}</loc></url></urlset>"#,
+        webpages::SITE_URL
+    )
+    .leak();
+
+    // Process start, for `/health`. `Instant` is monotonic, so this survives a
+    // wall-clock adjustment.
+    let started = std::time::Instant::now();
 
     let listener = match TcpListener::bind(addr).await {
         Ok(listener) => listener,
@@ -209,7 +195,7 @@ async fn main() -> std::process::ExitCode {
         // The socket's own address, which differs from the configured one
         // whenever that asks for port 0 or an unspecified host.
         address = %listener.local_addr().unwrap_or(addr),
-        routes = routes.len(),
+        build = webpages::BUILD,
         site_root = %leptos_options.site_root,
         site_pkg_dir = %leptos_options.site_pkg_dir,
         "listening",
@@ -228,10 +214,28 @@ async fn main() -> std::process::ExitCode {
                 )
             }),
         )
-        .leptos_routes(&leptos_options, routes, {
-            let leptos_options = leptos_options.clone();
-            move || shell(leptos_options.clone())
-        })
+        .route(
+            "/health",
+            get(move || async move {
+                (
+                    [(header::CONTENT_TYPE, "application/json")],
+                    format!(
+                        r#"{{"status":"ok","uptime_seconds":{},"build":"{}"}}"#,
+                        started.elapsed().as_secs(),
+                        webpages::BUILD
+                    ),
+                )
+            }),
+        )
+        .route(
+            "/",
+            get(render_app_to_stream({
+                let leptos_options = leptos_options.clone();
+                move || shell(leptos_options.clone())
+            })),
+        )
+        // Serves everything under the site root, and answers anything else with
+        // a 404. The pages the old site had are simply gone, so they land here.
         .fallback(leptos_axum::file_and_error_handler(shell))
         .layer(from_fn(log_request))
         .with_state(leptos_options);

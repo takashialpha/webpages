@@ -1,791 +1,257 @@
 /* ───────────────────────────────────────────────────────────────────────────
-   takashialpha, terminal-first personal page
-   palette: catppuccin mocha · type: jetbrains mono
+   takashialpha.com, as a tty.
+
+   The IBM VGA 8x16 ROM font: the one a text-mode console and a bios screen
+   actually draw. Its cell is 8 wide by 16 tall, so it is only crisp at multiples
+   of 16px, and `line-height: 1` is the real cell height rather than a guess.
+   No fluid type anywhere.
+
+   It has no bold face. A console fakes bold with a bright color, and so does
+   this stylesheet, because asking for a weight the font does not have gets you a
+   smeared synthetic bold.
    ─────────────────────────────────────────────────────────────────────────── */
 
-/* self-hosted JetBrains Mono, latin subset, files live in /public/fonts */
 @font-face {
-  font-family: "JetBrains Mono";
-  font-style: normal;
+  font-family: "VGA";
+  src: url("/fonts/vga.woff2") format("woff2");
   font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/jetbrains-mono-400.woff2") format("woff2");
-}
-@font-face {
-  font-family: "JetBrains Mono";
   font-style: normal;
-  font-weight: 500;
   font-display: swap;
-  src: url("/fonts/jetbrains-mono-500.woff2") format("woff2");
 }
-@font-face {
-  font-family: "JetBrains Mono";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/jetbrains-mono-700.woff2") format("woff2");
+
+/* ── palettes ───────────────────────────────────────────────────────────────
+   A palette is a `data-theme` value and nothing else, so adding one is a block
+   of custom properties here plus a line in theme.rs.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root,
+:root[data-theme="vga"] {
+  --bg: #000000;
+  --fg: #aaaaaa;
+  --bright: #ffffff;
+  --dim: #555555;
+  --accent: #55ff55;
+  --dir: #5555ff;
+  --err: #ff5555;
+  --link: #55ffff;
 }
-@font-face {
-  font-family: "JetBrains Mono";
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url("/fonts/jetbrains-mono-800.woff2") format("woff2");
+
+:root[data-theme="mocha"] {
+  --bg: #11111b;
+  --fg: #cdd6f4;
+  --bright: #ffffff;
+  --dim: #6c7086;
+  --accent: #a6e3a1;
+  --dir: #89b4fa;
+  --err: #f38ba8;
+  --link: #94e2d5;
 }
-@font-face {
-  font-family: "JetBrains Mono";
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/jetbrains-mono-italic.woff2") format("woff2");
+
+:root[data-theme="gruvbox"] {
+  --bg: #282828;
+  --fg: #ebdbb2;
+  --bright: #fbf1c7;
+  --dim: #928374;
+  --accent: #b8bb26;
+  --dir: #83a598;
+  --err: #fb4934;
+  --link: #8ec07c;
 }
+
+/* ── frame ──────────────────────────────────────────────────────────────── */
 
 :root {
-  /* catppuccin mocha */
-  --crust:    #11111b;
-  --mantle:   #181825;
-  --base:     #1e1e2e;
-  --surface0: #313244;
-  --surface1: #45475a;
-  --surface2: #585b70;
-  --overlay0: #6c7086;
-  --overlay1: #7f849c;
-  --subtext0: #a6adc8;
-  --subtext1: #bac2de;
-  --text:     #cdd6f4;
-
-  --green:    #a6e3a1;
-  --teal:     #94e2d5;
-  --sky:      #89dceb;
-  --sapphire: #74c7ec;
-  --blue:     #89b4fa;
-  --lavender: #b4befe;
-  --mauve:    #cba6f7;
-  --peach:    #fab387;
-  --yellow:   #f9e2af;
-  --red:      #f38ba8;
-  --pink:     #f5c2e7;
-
-  --accent: var(--green);
-  --accent-rgb: 166, 227, 161; /* green, overridden per page (see .page.audium) */
-
-  --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code",
-          "Fira Code", Menlo, Consolas, monospace;
-
-  --maxw: 920px;
-  --radius: 14px;
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  color-scheme: dark;
+  background: var(--bg);
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html { scroll-behavior: smooth; }
-
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
-  background: var(--crust);
-  color: var(--text);
-  font-family: var(--mono);
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  /* The generic stack is the only fallback, since the site ships one face. */
+  font-family: "VGA", ui-monospace, monospace;
+  /* One cell. Also the floor below which ios zooms a focused input. */
   font-size: 16px;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  /* The cell is exactly one em tall, so a console has no leading. */
+  line-height: 1;
+  -webkit-text-size-adjust: 100%;
 }
 
-a { color: inherit; text-decoration: none; }
-
-/* Visible keyboard-focus ring, using the prompt accent against the dark UI.
-   No border-radius here: it would reshape the focused element; browsers already
-   round the outline to follow each element's own radius. */
-:focus-visible {
-  outline: 2px solid var(--green);
-  outline-offset: 3px;
+@media (min-width: 720px) {
+  body {
+    /* Doubled, the way a console doubles its font on a hidpi screen. Each cell
+       is then 16px wide, which lands 78 to 84 columns on a desktop, the width a
+       real console runs at. 20px would be blurry: the bitmap only divides by
+       16. */
+    font-size: 32px;
+  }
 }
 
-/* Visually hidden, still exposed to assistive tech and crawlers. */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-::selection {
-  background: rgba(166, 227, 161, 0.25);
-  color: #fff;
-}
-
-/* ── thin custom scrollbar ─────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: var(--crust); }
-::-webkit-scrollbar-thumb {
-  background: var(--surface1);
-  border-radius: 20px;
-  border: 2px solid var(--crust);
-}
-::-webkit-scrollbar-thumb:hover { background: var(--surface2); }
-
-/* ───────────────────────────────────────────────────────────────────────────
-   page shell + animated background
-   ─────────────────────────────────────────────────────────────────────────── */
-
-.page {
-  position: relative;
-  min-height: 100vh;
-  overflow: hidden;
-  background:
-    radial-gradient(1200px 700px at 50% -10%, rgba(49, 50, 68, 0.55), transparent 60%),
-    linear-gradient(180deg, var(--base), var(--crust) 80%);
-}
-
-.bg-grid {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(var(--accent-rgb), 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--accent-rgb), 0.05) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: radial-gradient(900px 600px at 50% 0%, #000 30%, transparent 75%);
-  -webkit-mask-image: radial-gradient(900px 600px at 50% 0%, #000 30%, transparent 75%);
-}
-
-.bg-glow {
-  position: fixed;
-  top: -180px;
-  left: 50%;
-  width: 720px;
-  height: 420px;
-  transform: translateX(-50%);
-  pointer-events: none;
-  background: radial-gradient(closest-side, rgba(var(--accent-rgb), 0.16), transparent 70%);
-  filter: blur(20px);
-  animation: float 12s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.9; }
-  50%      { transform: translateX(-50%) translateY(26px); opacity: 0.6; }
-}
-
-.wrap {
-  position: relative;
-  z-index: 1;
-  max-width: var(--maxw);
-  margin: 0 auto;
-  padding: clamp(2.5rem, 6vw, 5rem) clamp(1.1rem, 4vw, 2rem) 5rem;
-}
-
-/* ───────────────────────────────────────────────────────────────────────────
-   hero terminal window
-   ─────────────────────────────────────────────────────────────────────────── */
-
-.hero { margin-bottom: clamp(3rem, 7vw, 5rem); }
-
-.term {
-  position: relative;
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(24, 24, 37, 0.92), rgba(17, 17, 27, 0.92));
-  box-shadow:
-    0 1px 0 rgba(205, 214, 244, 0.04) inset,
-    0 30px 80px -30px rgba(0, 0, 0, 0.8);
-  overflow: hidden;
-}
-
-/* animated gradient border */
-.term::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius);
-  padding: 1px;
-  background: linear-gradient(120deg, var(--green), var(--teal), var(--blue), var(--mauve), var(--green));
-  background-size: 300% 300%;
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  opacity: 0.55;
-  animation: borderflow 8s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes borderflow {
-  0%   { background-position: 0% 50%; }
-  100% { background-position: 300% 50%; }
-}
-
-.term-bar {
+/* A tty is a fixed screen that scrolls its own contents, with no scrollbar
+   furniture anywhere. Content is pinned to the bottom so the prompt sits where
+   it would on a console and older lines run off the top. Wheel and touch still
+   scroll back through them. */
+.tty {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0.7rem 0.95rem;
-  background: rgba(17, 17, 27, 0.7);
-  border-bottom: 1px solid rgba(205, 214, 244, 0.06);
+  flex-direction: column;
+  /* dvh, because the mobile url bar makes vh wrong. */
+  height: 100dvh;
+  padding: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  cursor: text;
 }
 
-.dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.dot.red    { background: var(--red); }
-.dot.yellow { background: var(--yellow); }
-.dot.green  { background: var(--green); }
-
-.term-title {
-  margin-left: 10px;
-  font-size: 0.78rem;
-  color: var(--overlay1);
-  letter-spacing: 0.02em;
+.tty::-webkit-scrollbar {
+  display: none;
 }
 
-.term-body {
-  padding: clamp(1.4rem, 4vw, 2.4rem) clamp(1.3rem, 4vw, 2.4rem) clamp(1.6rem, 4vw, 2.6rem);
+.screen {
+  /* Pushes the prompt to the bottom while the screen is still mostly empty. */
+  margin-top: auto;
+  max-width: 84ch;
 }
 
 .line {
-  margin: 0 0 0.4rem;
-  font-size: 0.86rem;
-  letter-spacing: 0.01em;
-}
-.usr    { color: var(--accent); font-weight: 700; }
-.at     { color: var(--overlay1); }
-.host   { color: var(--teal); font-weight: 700; }
-.line .path { color: var(--blue); }
-.prompt { color: var(--mauve); font-weight: 700; }
-.run    { color: var(--text); }
-
-.name {
-  margin: 0.4rem 0 0.7rem;
-  font-size: clamp(2.6rem, 9vw, 4.6rem);
-  font-weight: 800;
-  line-height: 1.02;
-  letter-spacing: -0.03em;
-  background: linear-gradient(100deg, var(--green) 0%, var(--teal) 38%, var(--sapphire) 72%, var(--lavender) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-
-.tagline {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5ch;
-  flex-wrap: wrap;
-  margin: 0 0 1.6rem;
-  min-height: 1.7em;
-  font-size: clamp(0.95rem, 2.6vw, 1.18rem);
-  color: var(--subtext1);
-}
-.prompt-sm { color: var(--overlay0); }
-
-/* typewriter */
-.tw { display: inline-flex; align-items: center; }
-.tw-text { color: var(--subtext1); }
-/* Static fallback for reduced-motion; the animated span shows otherwise. */
-.tw-static { display: none; color: var(--subtext1); }
-.tw-caret {
-  display: inline-block;
-  width: 0.62ch;
-  height: 1.05em;
-  margin-left: 2px;
-  transform: translateY(0.16em);
-  background: var(--green);
-  box-shadow: 0 0 10px rgba(166, 227, 161, 0.7);
-  animation: blink 1s steps(1) infinite;
-}
-@keyframes blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
-
-.hero-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.7rem;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4ch;
-  padding: 0.55rem 1.05rem;
-  border-radius: 9px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--subtext1);
-  border: 1px solid var(--surface1);
-  background: rgba(49, 50, 68, 0.35);
-  transition: transform 0.18s var(--ease), border-color 0.18s var(--ease),
-              color 0.18s var(--ease), box-shadow 0.18s var(--ease);
-}
-.btn:hover {
-  transform: translateY(-2px);
-  color: var(--text);
-  border-color: var(--surface2);
-}
-.btn.primary {
-  color: var(--crust);
-  font-weight: 700;
-  border-color: transparent;
-  background: linear-gradient(120deg, var(--accent), var(--teal));
-}
-.btn.primary:hover {
-  box-shadow: 0 10px 30px -10px rgba(var(--accent-rgb), 0.6);
-}
-
-/* ───────────────────────────────────────────────────────────────────────────
-   content blocks
-   ─────────────────────────────────────────────────────────────────────────── */
-
-.block { margin: clamp(2.6rem, 6vw, 4rem) 0; }
-
-.heading {
-  margin: 0 0 1.1rem;
-  font-size: clamp(1.15rem, 3.4vw, 1.5rem);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-.hash { color: var(--accent); }
-
-.lede {
-  margin: 0 0 0.8rem;
-  max-width: 64ch;
-  font-size: clamp(1rem, 2.6vw, 1.12rem);
-  color: var(--subtext1);
-}
-.muted { color: var(--overlay1); margin: 0; }
-em { color: var(--teal); font-style: italic; }
-
-/* stack cards */
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
-}
-
-.card {
-  position: relative;
-  padding: 1.3rem 1.3rem 1.4rem;
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(49, 50, 68, 0.35), rgba(30, 30, 46, 0.35));
-  border: 1px solid rgba(205, 214, 244, 0.07);
-  transition: transform 0.25s var(--ease), border-color 0.25s var(--ease),
-              box-shadow 0.25s var(--ease), background 0.25s var(--ease);
-  overflow: hidden;
-}
-.card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(420px 220px at var(--mx, 50%) -20%, rgba(var(--accent-rgb), 0.12), transparent 70%);
-  opacity: 0;
-  transition: opacity 0.3s var(--ease);
-  pointer-events: none;
-}
-.card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(var(--accent-rgb), 0.4);
-  box-shadow: 0 24px 50px -28px rgba(0, 0, 0, 0.85);
-}
-.card:hover::after { opacity: 1; }
-.card.accent {
-  border-color: rgba(166, 227, 161, 0.28);
-  background: linear-gradient(180deg, rgba(166, 227, 161, 0.08), rgba(30, 30, 46, 0.4));
-}
-
-.card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.6rem;
-}
-.card-emoji { font-size: 1.5rem; line-height: 1; }
-.card h3 {
-  margin: 0 0 0.4rem;
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text);
-}
-.card p {
   margin: 0;
-  font-size: 0.92rem;
-  color: var(--subtext0);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* Blank lines in output still occupy a row. */
+  min-height: 1em;
 }
 
-.badge {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 0.25rem 0.55rem;
-  border-radius: 999px;
-  color: var(--crust);
-  background: var(--green);
-}
-.badge.soft {
-  color: var(--green);
-  background: rgba(166, 227, 161, 0.12);
-  border: 1px solid rgba(166, 227, 161, 0.25);
-}
-.badge.pulse { animation: pulse 2.4s ease-in-out infinite; }
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(166, 227, 161, 0.4); }
-  50%      { box-shadow: 0 0 0 6px rgba(166, 227, 161, 0); }
+.gone {
+  display: none;
 }
 
-/* projects list */
-.projects { list-style: none; margin: 0; padding: 0; }
-.project { border-top: 1px solid rgba(205, 214, 244, 0.07); }
-.project:last-child { border-bottom: 1px solid rgba(205, 214, 244, 0.07); }
-
-.project-link {
-  display: flex;
-  align-items: center;
-  gap: 0.9rem;
-  padding: 1rem 0.4rem;
-  transition: padding 0.22s var(--ease), background 0.22s var(--ease);
-}
-.project-link:hover {
-  padding-left: 1.1rem;
-  background: linear-gradient(90deg, rgba(166, 227, 161, 0.07), transparent 60%);
-}
-.project-name {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--text);
-  white-space: nowrap;
-}
-.project-bullet { color: var(--green); }
-.project-desc {
-  flex: 1;
-  color: var(--overlay1);
-  font-size: 0.92rem;
-}
-.project-arrow {
-  color: var(--overlay0);
-  opacity: 0;
-  transform: translate(-6px, 0);
-  transition: opacity 0.22s var(--ease), transform 0.22s var(--ease), color 0.22s var(--ease);
-}
-.project-link:hover .project-arrow {
-  opacity: 1;
-  transform: translate(0, 0);
-  color: var(--green);
-}
-.contrib { margin-top: 1.2rem; font-size: 0.92rem; }
-.contrib a {
-  color: var(--subtext0);
-  border-bottom: 1px solid rgba(166, 227, 161, 0.4);
-  transition: color 0.18s var(--ease);
-}
-.contrib a:hover { color: var(--green); }
-
-/* two column */
-.two-col {
+/* `ls` output. Auto-fill rather than a fixed count, so it columns on a wide
+   screen and collapses to one column on a phone, which is what a terminal does
+   when it runs out of width. */
+.cols {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: clamp(1.5rem, 4vw, 3rem);
+  grid-template-columns: repeat(auto-fill, minmax(20ch, 1fr));
+  column-gap: 2ch;
 }
-.col p { margin: 0; color: var(--subtext1); }
 
-/* connect / socials */
-.socials { list-style: none; margin: 0 0 1.5rem; padding: 0; }
-.social { border-top: 1px solid rgba(205, 214, 244, 0.07); }
-.social:last-child { border-bottom: 1px solid rgba(205, 214, 244, 0.07); }
+/* ── output ─────────────────────────────────────────────────────────────── */
 
-.social-link {
+.prompt {
+  color: var(--accent);
+}
+
+.dim {
+  color: var(--dim);
+}
+
+.accent {
+  color: var(--accent);
+}
+
+.dir {
+  color: var(--dir);
+}
+
+.err {
+  color: var(--err);
+}
+
+a,
+.link {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--bright);
+}
+
+a:focus-visible,
+.key:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── the prompt line ────────────────────────────────────────────────────────
+   The input is the real one, inline and unstyled, so the caret sits where the
+   text cursor actually is.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.current {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
-  padding: 0.85rem 0.4rem;
-  transition: padding 0.22s var(--ease), background 0.22s var(--ease);
-}
-a.social-link:hover {
-  padding-left: 1.1rem;
-  background: linear-gradient(90deg, rgba(166, 227, 161, 0.07), transparent 60%);
-}
-.social-label {
-  min-width: 5.5rem;
-  font-weight: 700;
-  color: var(--text);
-}
-.social-arrow { color: var(--green); }
-.social-handle { color: var(--overlay1); font-size: 0.95rem; }
-a.social-link:hover .social-handle { color: var(--subtext1); }
-.social-link.is-static { cursor: default; }
-
-.sponsor-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.85rem;
-}
-.btn.sponsor {
-  color: var(--crust);
-  font-weight: 700;
-  font-size: 0.98rem;
-  padding: 0.62rem 1.3rem;
-  border-color: transparent;
-  background: linear-gradient(120deg, var(--pink), var(--mauve));
-  box-shadow: 0 8px 26px -10px rgba(245, 194, 231, 0.55);
-  animation: sponsor-glow 2.4s ease-in-out infinite;
-}
-.btn.sponsor:hover {
-  color: var(--crust);
-  transform: translateY(-3px) scale(1.03);
-  box-shadow: 0 16px 40px -8px rgba(245, 194, 231, 0.85);
-  animation: none;
-}
-@keyframes sponsor-glow {
-  0%, 100% { box-shadow: 0 6px 22px -12px rgba(245, 194, 231, 0.45); }
-  50%      { box-shadow: 0 10px 34px -8px rgba(245, 194, 231, 0.8),
-                         0 0 0 4px rgba(245, 194, 231, 0.12); }
-}
-.sponsor-heart { color: var(--crust); }
-.sponsor-note { font-size: 0.9rem; }
-
-.focus { list-style: none; margin: 0; padding: 0; }
-.focus li {
-  position: relative;
-  padding: 0.35rem 0 0.35rem 1.4rem;
-  color: var(--subtext1);
-}
-.focus li::before {
-  content: "▹";
-  position: absolute;
-  left: 0;
-  color: var(--green);
+  /* The literal space between the prompt and the input would be collapsed by
+     flex layout, so the gap supplies it. */
+  gap: 1ch;
 }
 
-/* back-to-index nav */
-.topnav { margin-bottom: clamp(1.2rem, 3.5vw, 2rem); }
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45ch;
-  font-size: 0.88rem;
-  color: var(--overlay1);
-  padding: 0.35rem 0.15rem;
-  transition: color 0.18s var(--ease);
-}
-.back:hover { color: var(--text); }
-.back .prompt { color: var(--mauve); }
-.back-cmd { color: inherit; }
-.back-arrow {
-  display: inline-block;
-  color: var(--accent);
-  transition: transform 0.18s var(--ease);
-}
-.back:hover .back-arrow { transform: translateX(-3px); }
-
-/* footer */
-.foot {
-  margin-top: clamp(3rem, 8vw, 5rem);
-  padding-top: 1.4rem;
-  border-top: 1px solid rgba(205, 214, 244, 0.07);
-  font-size: 0.92rem;
-  color: var(--overlay1);
-}
-.foot .str { color: var(--green); }
-.caret-static {
-  display: inline-block;
-  width: 0.55ch;
-  height: 1.05em;
-  margin-left: 4px;
-  transform: translateY(0.18em);
-  background: var(--green);
-  animation: blink 1.1s steps(1) infinite;
+.stdin {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--bright);
+  font: inherit;
+  caret-color: var(--accent);
+  /* Honored where supported, ignored cleanly elsewhere. */
+  caret-shape: block;
 }
 
-/* ───────────────────────────────────────────────────────────────────────────
-   reveal-on-load (staggered)
+.stdin:focus {
+  outline: none;
+}
+
+/* ── the extra-keys row ─────────────────────────────────────────────────────
+   Phones have no tab and no arrows. Mobile terminal emulators answer this with
+   a key row above the keyboard, so this does too. Anything with a real keyboard
+   never sees it.
    ─────────────────────────────────────────────────────────────────────────── */
-.reveal {
-  opacity: 0;
-  transform: translateY(18px);
-  animation: reveal 0.7s var(--ease) forwards;
-}
-.reveal:nth-child(1) { animation-delay: 0.05s; }
-.reveal:nth-child(2) { animation-delay: 0.18s; }
-.reveal:nth-child(3) { animation-delay: 0.3s; }
-.reveal:nth-child(4) { animation-delay: 0.42s; }
-.reveal:nth-child(5) { animation-delay: 0.54s; }
-.reveal:nth-child(6) { animation-delay: 0.66s; }
-.reveal:nth-child(7) { animation-delay: 0.78s; }
 
-@keyframes reveal {
-  to { opacity: 1; transform: translateY(0); }
+.keys {
+  display: none;
 }
 
-/* ───────────────────────────────────────────────────────────────────────────
-   minimal landing (/) + 404
-   ─────────────────────────────────────────────────────────────────────────── */
-.landing {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(900px 500px at 50% 0%, rgba(49, 50, 68, 0.5), transparent 60%),
-    linear-gradient(180deg, var(--base), var(--crust));
-  padding: 2rem;
-}
-.landing-inner { text-align: center; }
-.landing-links { display: flex; flex-direction: column; gap: 0.7rem; align-items: center; margin-top: 0.3rem; }
-.landing-prompt { font-size: 1rem; color: var(--subtext1); margin: 0 0 1rem; }
-.landing-prompt .path { color: var(--blue); }
-.landing-prompt .sep { color: var(--mauve); }
-.landing-prompt .cmd { color: var(--text); }
-.landing-error { color: var(--red); margin: 0 0 1rem; font-size: 0.92rem; }
-.landing-link {
-  display: inline-block;
-  font-size: clamp(1.4rem, 6vw, 2.2rem);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--green);
-  border-bottom: 2px solid transparent;
-  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease);
-}
-.landing-link:hover { border-color: var(--green); transform: translateY(-2px); }
-
-/* ───────────────────────────────────────────────────────────────────────────
-   project pages (/audium, /swagsh), reuse the shared system, each its own accent
-   ─────────────────────────────────────────────────────────────────────────── */
-.page.audium { --accent: var(--blue);  --accent-rgb: 137, 180, 250; }
-.page.swagsh { --accent: var(--mauve); --accent-rgb: 203, 166, 247; }
-
-/* per-page wordmark gradient (lead color matches the accent) */
-.page.audium .name {
-  background: linear-gradient(100deg, var(--blue) 0%, var(--sapphire) 38%, var(--teal) 72%, var(--lavender) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-.page.swagsh .name {
-  background: linear-gradient(100deg, var(--mauve) 0%, var(--lavender) 38%, var(--blue) 72%, var(--teal) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-
-/* shared tweaks for both project pages */
-.page.audium .cards,
-.page.swagsh .cards { grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); }
-.card p code { color: var(--accent); }
-
-.a-hero { display: grid; gap: 1.4rem; margin-bottom: clamp(2rem, 6vw, 3.5rem); }
-/* demo session output lines */
-.out { margin: 0; color: var(--subtext0); font-size: 0.86rem; }
-.a-demo img, .a-demo video { display: block; width: 100%; height: auto; }
-.hero-sub { max-width: 56ch; margin: 0.9rem 0 1.5rem; color: var(--subtext0); font-size: 0.98rem; }
-.a-caret {
-  display: inline-block;
-  width: 0.6ch;
-  height: 1.05em;
-  margin-left: 2px;
-  transform: translateY(0.16em);
-  background: var(--accent);
-  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.7);
-  animation: blink 1s steps(1) infinite;
-}
-
-.a-section { padding: clamp(2.8rem, 7vw, 4.5rem) 0; }
-.a-label {
-  font-size: 0.78rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--overlay0);
-  margin-bottom: 0.6rem;
-}
-.a-lede { max-width: 64ch; color: var(--subtext1); font-size: 1rem; margin-bottom: 0.4rem; }
-
-/* install cards */
-.a-cmd-title {
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--overlay1);
-  margin-bottom: 0.8rem;
-}
-.a-code { display: block; color: var(--accent); font-size: 0.9rem; word-break: break-all; }
-.a-comment { margin-top: 0.5rem; color: var(--overlay0); font-size: 0.78rem; }
-.a-note { margin-top: 1.2rem; max-width: 70ch; color: var(--overlay1); font-size: 0.88rem; }
-.a-note a { color: var(--subtext0); border-bottom: 1px solid rgba(var(--accent-rgb), 0.4); }
-.a-note a:hover { color: var(--accent); }
-
-/* feature icon (cards otherwise reuse .card) */
-.feature-icon { display: block; font-size: 1.5rem; margin-bottom: 0.7rem; }
-
-/* why grid */
-.a-why-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1.4rem 2rem;
-  margin-top: 1.4rem;
-}
-.a-why-item { border-left: 2px solid var(--surface1); padding-left: 1.1rem; transition: border-color 0.18s var(--ease); }
-.a-why-item:hover { border-color: var(--accent); }
-.a-why-item h3 { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 0.3rem; }
-.a-why-item p { color: var(--subtext0); font-size: 0.9rem; }
-
-/* numbered variant: a stacked list, for counts that never tile into a grid */
-.a-why-list { margin-top: 1.6rem; counter-reset: why; }
-.a-why-list .a-why-item {
-  display: grid;
-  grid-template-columns: 3.4ch 1fr;
-  gap: 0.25rem 1.4rem;
-  border-left: 0;
-  border-top: 1px solid var(--surface0);
-  padding: 1.15rem 0;
-}
-.a-why-list .a-why-item:last-child { border-bottom: 1px solid var(--surface0); }
-.a-why-list .a-why-item::before {
-  counter-increment: why;
-  content: counter(why, decimal-leading-zero);
-  grid-row: 1 / span 2;
-  padding-top: 0.25rem;
-  color: var(--overlay0);
-  font-size: 0.8rem;
-  transition: color 0.18s var(--ease);
-}
-.a-why-list .a-why-item:hover::before { color: var(--accent); }
-.a-why-list .a-why-item h3 { font-size: 1.05rem; }
-.a-why-list .a-why-item p { max-width: 70ch; }
-
-@media (max-width: 520px) {
-  .a-why-list .a-why-item { grid-template-columns: 1fr; }
-  .a-why-list .a-why-item::before { grid-row: auto; padding-top: 0; }
-}
-
-/* ───────────────────────────────────────────────────────────────────────────
-   responsive + a11y
-   ─────────────────────────────────────────────────────────────────────────── */
-@media (max-width: 680px) {
-  .two-col { grid-template-columns: 1fr; }
-  .project-link { flex-wrap: wrap; gap: 0.3rem 0.8rem; }
-  .project-desc { flex-basis: 100%; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
+@media (hover: none) and (pointer: coarse) {
+  /* Clear the fixed key row at the bottom. */
+  .tty {
+    padding-bottom: 64px;
   }
-  .reveal { opacity: 1; transform: none; }
-  /* Swap the JS typewriter for its static first phrase. */
-  .tw-text, .tw-caret { display: none; }
-  .tw-static { display: inline; }
+
+  .keys {
+    position: fixed;
+    inset: auto 0 0 0;
+    display: flex;
+    gap: 1px;
+    padding: 6px;
+    background: var(--bg);
+    border-top: 1px solid var(--dim);
+  }
+}
+
+.key {
+  flex: 1 1 0;
+  padding: 10px 0;
+  border: 1px solid var(--dim);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.key:active {
+  background: var(--dim);
+  color: var(--bg);
 }
