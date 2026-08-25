@@ -25,8 +25,11 @@ jobs:
         run: |
           mkdir -p dist
           cp target/release/webpages dist/
+          # Leptos resolves the hashed bundle names from this file, and looks
+          # for it beside the binary. Without it the site serves unstyled.
+          cp target/release/hash.txt dist/
           cp -r target/site dist/site
-          tar -C dist -czf webpages-x86_64-linux.tar.gz webpages site
+          tar -C dist -czf webpages-x86_64-linux.tar.gz webpages hash.txt site
           sha256sum webpages-x86_64-linux.tar.gz > webpages-x86_64-linux.tar.gz.sha256
       - name: Drop previous rolling release
         env:

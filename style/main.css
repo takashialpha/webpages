@@ -661,7 +661,7 @@ a.social-link:hover .social-handle { color: var(--subtext1); }
 .page.audium { --accent: var(--blue);  --accent-rgb: 137, 180, 250; }
 .page.swagsh { --accent: var(--mauve); --accent-rgb: 203, 166, 247; }
 
-/* per-page wordmark gradient (lead colour matches the accent) */
+/* per-page wordmark gradient (lead color matches the accent) */
 .page.audium .name {
   background: linear-gradient(100deg, var(--blue) 0%, var(--sapphire) 38%, var(--teal) 72%, var(--lavender) 100%);
   -webkit-background-clip: text;

@@ -18,7 +18,22 @@ axum = { version = "0", features = ["http2"], optional = true }
 console_error_panic_hook = { version = "0", optional = true }
 leptos_axum = { version = "0", optional = true }
 leptos_meta = { version = "0" }
-tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
+# Each feature backs something the server binary uses directly: `macros` for
+# `#[tokio::main]` and `select!`, `net` for `TcpListener`, `signal` for graceful
+# shutdown. Spelled out rather than left to feature unification from axum, whose
+# own feature set is not ours to depend on.
+tokio = { version = "1", features = [
+  "macros",
+  "net",
+  "rt-multi-thread",
+  "signal",
+], optional = true }
+tracing = { version = "0", optional = true }
+# `ansi` implies `fmt`, which implies `registry` and `std`.
+tracing-subscriber = { version = "0", default-features = false, features = [
+  "ansi",
+  "env-filter",
+], optional = true }
 wasm-bindgen = { version = "0", optional = true }
 
 [features]
@@ -27,10 +42,18 @@ ssr = [
   "dep:axum",
   "dep:tokio",
   "dep:leptos_axum",
+  "dep:tracing",
+  "dep:tracing-subscriber",
   "leptos/ssr",
   "leptos_meta/ssr",
   "leptos_router/ssr",
 ]
+
+# A tree this size emits enough DWARF to overflow the 4 GiB range of 32-bit debug
+# relocations, which fails the link. Line tables still give file and line in
+# backtraces, at a fraction of the size.
+[profile.dev]
+debug = "line-tables-only"
 
 # Defines a size-optimized profile for the WASM bundle in release mode
 [profile.wasm-release]
@@ -58,6 +81,10 @@ style-file = "style/main.css"
 #
 # Optional. Env: LEPTOS_ASSETS_DIR.
 assets-dir = "public"
+
+# Content-hash the bundle filenames, so a changed bundle gets a new URL and can
+# be cached forever. Writes the hashes to `hash.txt` next to the server binary.
+hash-files = true
 
 # The IP and port (ex: [::1]:3000) where the server serves the content. Use it in your server setup.
 site-addr = "[::1]:3000"

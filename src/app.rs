@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use leptos_meta::{Link, MetaTags, Stylesheet, provide_meta_context};
+use leptos_meta::{HashedStylesheet, Link, MetaTags, provide_meta_context};
 use leptos_router::{
     StaticSegment,
     components::{Route, Router, Routes},
@@ -19,7 +19,11 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <meta name="theme-color" content="#11111b"/>
-                <AutoReload options=options.clone() />
+                <AutoReload options=options.clone()/>
+                // Resolves the content-hashed stylesheet name from `hash.txt`,
+                // so this cannot be a fixed href. Ahead of the hydration
+                // scripts so the CSS request goes out first.
+                <HashedStylesheet options=options.clone() id="leptos"/>
                 <HydrationScripts options/>
                 <MetaTags/>
             </head>
@@ -35,8 +39,6 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
-        <Stylesheet id="leptos" href="/pkg/webpages.css"/>
-
         // JetBrains Mono is self-hosted from /public/fonts (see @font-face in main.css).
         // Preload the upright weight that paints first.
         <Link
