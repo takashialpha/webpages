@@ -98,9 +98,8 @@ body {
 }
 
 /* A tty is a fixed screen that scrolls its own contents, with no scrollbar
-   furniture anywhere. Content is pinned to the bottom so the prompt sits where
-   it would on a console and older lines run off the top. Wheel and touch still
-   scroll back through them. */
+   furniture anywhere. Text fills from the top, and once it overflows the older
+   lines run off above. Wheel and touch still scroll back through them. */
 .tty {
   display: flex;
   flex-direction: column;
@@ -111,6 +110,17 @@ body {
   overscroll-behavior: contain;
   scrollbar-width: none;
   cursor: text;
+  /* There is no mouse on a tty. Clicks hand the keyboard back instead of
+     starting a selection, so the shell never quietly stops listening. Links and
+     the prompt opt back in below. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.tty a,
+.tty .stdin {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .tty::-webkit-scrollbar {
@@ -118,8 +128,8 @@ body {
 }
 
 .screen {
-  /* Pushes the prompt to the bottom while the screen is still mostly empty. */
-  margin-top: auto;
+  /* A console fills from the top and only reaches the bottom once it has
+     scrolled, so nothing pins the prompt down there. */
   max-width: 84ch;
 }
 
@@ -196,18 +206,46 @@ a:focus-visible,
   gap: 1ch;
 }
 
-.stdin {
+/* Holds the input and the cursor drawn over it. */
+.field {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.stdin {
+  width: 100%;
   margin: 0;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--bright);
   font: inherit;
-  caret-color: var(--accent);
-  /* Honored where supported, ignored cleanly elsewhere. */
-  caret-shape: block;
+  /* The real caret is a thin bar. A console blinks an underscore, so the native
+     one is hidden and `.cursor` is drawn instead. */
+  caret-color: transparent;
+}
+
+/* Placed by column rather than measured: the font is fixed width, so `1ch` is
+   exactly one cell and the cursor stays correct after an arrow key. */
+.cursor {
+  position: absolute;
+  top: 0;
+  color: var(--bright);
+  pointer-events: none;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor {
+    animation: none;
+  }
 }
 
 .stdin:focus {

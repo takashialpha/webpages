@@ -75,6 +75,10 @@ The format follows where stdout goes. Color is used only when stdout is a termin
 
 At startup the server also warns about the two ways a deploy can come up looking healthy while serving broken pages: `LEPTOS_SITE_ROOT` not pointing at a directory, and `hash.txt` missing from beside the binary.
 
+## Time
+
+`date` and `uptime` answer with the server's clock, not the browser's. The server stamps its UTC time and uptime onto the document, and the browser only measures how long the page has been open, so a visitor with a skewed system clock still sees the right time. UTC is formatted in `src/clock.rs` rather than pulled from a date library.
+
 ## Fonts
 
 The page is set in the IBM VGA 8x16 ROM font, the face a text-mode console and a bios screen actually draw, taken from the [Ultimate Oldschool PC Font Pack](https://int10h.org/oldschool-pc-fonts/) and served as woff2 from `public/fonts/`, about 6 KB. It is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) by VileR; the license text ships alongside it in `public/fonts/vga-LICENSE.txt`.

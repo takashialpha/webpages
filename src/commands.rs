@@ -3,6 +3,7 @@
 //! Adding a command is one entry in [`COMMANDS`] and one function. Nothing else
 //! needs touching: `help` lists whatever is here, and completion offers it.
 
+use crate::clock;
 use crate::fs::{self, Node};
 use crate::shell::{Command, Line, Output, Session, Span, body, error, line};
 use crate::theme;
@@ -208,15 +209,15 @@ fn set_theme(_session: &mut Session, args: &[&str]) -> Output {
 }
 
 fn date(_session: &mut Session, _args: &[&str]) -> Output {
-    line(now_utc())
+    line(clock::format_utc(clock::now_millis()))
 }
 
 fn uptime(_session: &mut Session, _args: &[&str]) -> Output {
-    line(format!("up {}", format_duration(uptime_secs())))
+    line(format!("up {}", format_duration(clock::uptime_secs())))
 }
 
 /// `4 days, 2:11`, the way `uptime` renders it.
-fn format_duration(total: u64) -> String {
+fn format_duration(total: i64) -> String {
     let days = total / 86_400;
     let hours = (total % 86_400) / 3600;
     let minutes = (total % 3600) / 60;
@@ -227,67 +228,4 @@ fn format_duration(total: u64) -> String {
         1 => format!("1 day, {clock}"),
         _ => format!("{days} days, {clock}"),
     }
-}
-
-/// Current UTC, formatted the way `date -u` prints it.
-#[cfg(feature = "hydrate")]
-fn now_utc() -> String {
-    const DAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const MONTHS: [&str; 12] = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    ];
-
-    let now = js_sys::Date::new_0();
-    let day = DAYS
-        .get(now.get_utc_day() as usize)
-        .copied()
-        .unwrap_or("???");
-    let month = MONTHS
-        .get(now.get_utc_month() as usize)
-        .copied()
-        .unwrap_or("???");
-
-    format!(
-        "{day} {month} {:2} {:02}:{:02}:{:02} UTC {}",
-        now.get_utc_date(),
-        now.get_utc_hours(),
-        now.get_utc_minutes(),
-        now.get_utc_seconds(),
-        now.get_utc_full_year(),
-    )
-}
-
-/// Commands only ever run in the browser, so this branch exists to keep the
-/// server build compiling and is never reached.
-#[cfg(not(feature = "hydrate"))]
-fn now_utc() -> String {
-    "unavailable".to_owned()
-}
-
-/// The server's uptime when the page was rendered, plus however long the page
-/// has been open. Avoids a request, and stays correct as the tab sits there.
-#[cfg(feature = "hydrate")]
-fn uptime_secs() -> u64 {
-    let at_render: f64 = leptos::prelude::document()
-        .document_element()
-        .and_then(|html| html.get_attribute("data-uptime"))
-        .and_then(|value| value.parse().ok())
-        .unwrap_or_default();
-
-    let since_load = (js_sys::Date::now() - crate::loaded_at()) / 1000.0;
-    let seconds = (at_render + since_load).max(0.0);
-
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "clamped non-negative, and no process runs for 10^19 seconds"
-    )]
-    {
-        seconds as u64
-    }
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn uptime_secs() -> u64 {
-    crate::server_uptime_secs()
 }

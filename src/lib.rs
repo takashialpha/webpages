@@ -3,6 +3,7 @@
 #![recursion_limit = "256"]
 
 pub mod app;
+pub mod clock;
 pub mod commands;
 pub mod fs;
 pub mod seo;
@@ -65,38 +66,10 @@ pub fn uname() -> String {
         .unwrap_or_else(|| "Linux takashialpha unknown".to_owned())
 }
 
-/// Seconds this process has been up.
-///
-/// Pinned by the first call, which the server makes at startup, so both
-/// `/health` and the `data-uptime` attribute report the same clock. `Instant` is
-/// monotonic, so a wall-clock adjustment cannot move it.
-#[cfg(not(feature = "hydrate"))]
-#[must_use]
-pub fn server_uptime_secs() -> u64 {
-    use std::sync::OnceLock;
-    use std::time::Instant;
-
-    static START: OnceLock<Instant> = OnceLock::new();
-    START.get_or_init(Instant::now).elapsed().as_secs()
-}
-
 /// `BUILD` shortened to the usual seven characters, when it is a full SHA.
 #[must_use]
 pub fn short_build() -> &'static str {
     BUILD.get(..7).unwrap_or(BUILD)
-}
-
-/// When this page was loaded, as a millisecond epoch.
-///
-/// Pinned by the first call, which [`hydrate`] makes, so `uptime` can add the
-/// time a tab has been open to the server uptime baked into the document.
-#[cfg(feature = "hydrate")]
-#[must_use]
-pub fn loaded_at() -> f64 {
-    use std::sync::OnceLock;
-
-    static LOADED: OnceLock<f64> = OnceLock::new();
-    *LOADED.get_or_init(js_sys::Date::now)
 }
 
 #[cfg(feature = "hydrate")]
@@ -104,7 +77,5 @@ pub fn loaded_at() -> f64 {
 pub fn hydrate() {
     use crate::app::App;
     console_error_panic_hook::set_once();
-    // Pins the load time before anything can ask for it.
-    let _ = loaded_at();
     leptos::mount::hydrate_body(App);
 }

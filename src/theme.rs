@@ -1,8 +1,11 @@
-//! Palettes, switched by the `theme` command and remembered per browser.
+//! Palettes, switched by the `theme` command.
 //!
 //! A palette is nothing but a `data-theme` value on the document; the CSS holds
 //! the actual colors. That keeps switching to one attribute write and means a
 //! new palette is a block of custom properties, not code.
+//!
+//! Nothing is stored, so a palette lasts for the visit and the next one starts
+//! at the default. A tty does not remember you either.
 
 pub struct Palette {
     pub name: &'static str,
@@ -27,10 +30,6 @@ pub const PALETTES: &[Palette] = &[
 /// The palette used before anyone chooses one.
 pub const DEFAULT: &str = "vga";
 
-/// The key the palette is stored under, shared with the inline script in the
-/// document head that applies it before first paint.
-pub const STORAGE_KEY: &str = "theme";
-
 #[must_use]
 fn known(name: &str) -> Option<&'static Palette> {
     PALETTES.iter().find(|palette| palette.name == name)
@@ -43,9 +42,6 @@ pub fn apply(name: &str) -> Option<&'static Palette> {
 
     if let Some(html) = leptos::prelude::document().document_element() {
         let _ = html.set_attribute("data-theme", palette.name);
-    }
-    if let Ok(Some(storage)) = leptos::prelude::window().local_storage() {
-        let _ = storage.set_item(STORAGE_KEY, palette.name);
     }
     Some(palette)
 }

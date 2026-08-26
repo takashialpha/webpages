@@ -2440,7 +2440,6 @@ dependencies = [
  "any_spawner",
  "axum",
  "console_error_panic_hook",
- "js-sys",
  "leptos",
  "leptos_axum",
  "leptos_meta",

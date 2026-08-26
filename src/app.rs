@@ -8,33 +8,33 @@ use crate::{short_build, uname};
 
 // The document shell only ever renders on the server; the browser hydrates the
 // body it produced. Keeping it out of the WASM build drops the whole head from
-// the bundle.
-#[cfg(not(feature = "hydrate"))]
+// the bundle. Gated on `ssr` rather than `not(hydrate)` so that enabling both
+// features at once, as `--all-features` does, still leaves the server binary
+// with a shell to render.
+#[cfg(feature = "ssr")]
 use leptos_meta::{HashedStylesheet, MetaTags};
 
-#[cfg(not(feature = "hydrate"))]
-use crate::{server_uptime_secs, theme};
+#[cfg(feature = "ssr")]
+use crate::{clock, theme};
 
-/// Reapplies the stored palette before the first paint. Kept in sync with
-/// [`theme::STORAGE_KEY`] by hand, because it has to run before the WASM loads.
-#[cfg(not(feature = "hydrate"))]
-const THEME_SCRIPT: &str = "try{var t=localStorage.getItem('theme');\
-if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}";
-
-#[cfg(not(feature = "hydrate"))]
+#[cfg(feature = "ssr")]
 #[must_use]
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
         <!DOCTYPE html>
-        <html lang="en" data-uname=uname() data-uptime=server_uptime_secs().to_string() data-theme=theme::DEFAULT>
+        <html
+            lang="en"
+            data-uname=uname()
+            // The server's clock, which the browser carries forward rather than
+            // consulting its own. See clock.rs.
+            data-time=clock::now_millis().to_string()
+            data-uptime=clock::uptime_secs().to_string()
+            data-theme=theme::DEFAULT
+        >
             <head>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <meta name="theme-color" content="#000000"/>
-                // Applies the stored palette before first paint, so a
-                // visitor who picked one does not watch the default flash
-                // past first. Inert if storage is unavailable.
-                <script inner_html=THEME_SCRIPT></script>
                 <AutoReload options=options.clone()/>
                 // Resolves the content-hashed stylesheet name from `hash.txt`,
                 // so this cannot be a fixed href. Ahead of the hydration
@@ -60,13 +60,32 @@ fn Banner() -> impl IntoView {
             <p class="line dim">{uname()}</p>
             <p class="line">""</p>
             <p class="line">
-                <span class="dim">" * source:   "</span>
-                <a href="https://github.com/takashialpha/webpages">
+                <span class="dim">" * source:     "</span>
+                <a
+                    href="https://github.com/takashialpha/webpages"
+                    target="_blank"
+                    rel="noreferrer"
+                >
                     "https://github.com/takashialpha/webpages"
                 </a>
             </p>
+            // An motd lists what the box runs, which is also the natural place
+            // to credit the people whose work this is built on.
             <p class="line">
-                <span class="dim">" * build:    "</span>
+                <span class="dim">" * built with: "</span>
+                <a href="https://leptos.dev" target="_blank" rel="noreferrer">"leptos"</a>
+                <span class="dim">" and "</span>
+                <a
+                    href="https://github.com/tokio-rs/axum"
+                    target="_blank"
+                    rel="noreferrer"
+                >
+                    "axum"
+                </a>
+                <span class="dim">", in rust"</span>
+            </p>
+            <p class="line">
+                <span class="dim">" * build:      "</span>
                 <span class="accent">{short_build()}</span>
             </p>
             <p class="line">""</p>

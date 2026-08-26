@@ -122,6 +122,9 @@ async fn main() -> std::process::ExitCode {
     }
     init_panic_logging();
 
+    // Pins the process start before anything can ask for the uptime.
+    let _ = webpages::clock::uptime_secs();
+
     // Leptos renders through a global spawner. `leptos_axum` installs one from
     // inside its router helpers; serving a single route by hand skips that, and
     // every render panics on the first spawn. An error means one is already set,
@@ -180,10 +183,6 @@ async fn main() -> std::process::ExitCode {
     )
     .leak();
 
-    // Process start, for `/health`. `Instant` is monotonic, so this survives a
-    // wall-clock adjustment.
-    let started = std::time::Instant::now();
-
     let listener = match TcpListener::bind(addr).await {
         Ok(listener) => listener,
         Err(error) => {
@@ -216,12 +215,12 @@ async fn main() -> std::process::ExitCode {
         )
         .route(
             "/health",
-            get(move || async move {
+            get(|| async {
                 (
                     [(header::CONTENT_TYPE, "application/json")],
                     format!(
                         r#"{{"status":"ok","uptime_seconds":{},"build":"{}"}}"#,
-                        started.elapsed().as_secs(),
+                        webpages::clock::uptime_secs(),
                         webpages::BUILD
                     ),
                 )

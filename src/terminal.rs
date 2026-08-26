@@ -15,6 +15,21 @@ struct Entry {
     output: Output,
 }
 
+/// What `exit` prints before the session goes inert. The personal line lives in
+/// `content/logout.txt` so it can be reworded without touching code.
+fn farewell() -> Output {
+    const GOODBYE: &str = include_str!("../content/logout.txt");
+
+    Output::Lines(vec![
+        vec![Span::plain("logout")],
+        vec![Span::plain(GOODBYE.trim_end())],
+        vec![Span::new(
+            format!("Connection to {} closed.", crate::site_host()),
+            "dim",
+        )],
+    ])
+}
+
 /// Paints one line of output. Link spans become real anchors, which is the one
 /// thing on this page you click rather than type.
 fn render_line(line: &Line) -> AnyView {
@@ -51,7 +66,7 @@ fn render_output(output: &Output) -> AnyView {
             </div>
         }
         .into_any(),
-        Output::Clear | Output::Nothing => ().into_any(),
+        Output::Clear | Output::Exit | Output::Nothing => ().into_any(),
     }
 }
 
@@ -91,10 +106,10 @@ pub fn Terminal(children: Children) -> impl IntoView {
 
     // Read the caret back out of the input after anything that could move it.
     let sync_column = move || {
-        if let Some(element) = input_ref.get() {
-            if let Ok(Some(at)) = element.selection_start() {
-                column.set(at as usize);
-            }
+        if let Some(element) = input_ref.get()
+            && let Ok(Some(at)) = element.selection_start()
+        {
+            column.set(at as usize);
         }
     };
 
@@ -227,7 +242,20 @@ pub fn Terminal(children: Children) -> impl IntoView {
     };
 
     view! {
-        <main class="tty" on:pointerdown=move |_| focus_input()>
+        // Anywhere that is not a link or the prompt itself gives the keyboard
+        // straight back, so the shell never silently stops listening. There is
+        // no mouse on a tty, so there is nothing else for a click to do.
+        //
+        // Preventing the default on pointerdown stops the focus moving and the
+        // selection starting, but a click still fires, so links keep working
+        // without needing to opt out of this.
+        <main
+            class="tty"
+            on:pointerdown=move |event| {
+                event.prevent_default();
+                focus_input();
+            }
+        >
             <div class="screen" aria-live="polite">
                 <div class:gone=move || !banner.get()>{children()}</div>
                 {move || {
@@ -251,61 +279,84 @@ pub fn Terminal(children: Children) -> impl IntoView {
                 // hidden one mirrored into a span. Mirroring would draw the
                 // caret at the end of the text even after Left arrow, which
                 // misreports where typing will land.
-                <p class="line current">
-                    <span class="prompt">{prompt}</span>
-                    <input
-                        class="stdin"
-                        node_ref=input_ref
-                        type="text"
-                        autocapitalize="off"
-                        autocomplete="off"
-                        spellcheck="false"
-                        aria-label="terminal input"
-                        prop:value=move || input.get()
-                        on:input:target=move |event| {
-                            recalled.set(None);
-                            input.set(event.target().value());
-                        }
-                        on:keydown=on_keydown
-                    />
-                </p>
+                <Show when=move || !closed.get()>
+                    <p class="line current">
+                        <span class="prompt">{prompt}</span>
+                        <span class="field">
+                            <input
+                                class="stdin"
+                                node_ref=input_ref
+                                type="text"
+                                autocapitalize="off"
+                                autocomplete="off"
+                                spellcheck="false"
+                                aria-label="terminal input"
+                                prop:value=move || input.get()
+                                // The prompt is the one place a click should
+                                // behave normally, so you can put the caret
+                                // where you want it.
+                                on:pointerdown=|event| event.stop_propagation()
+                                on:input:target=move |event| {
+                                    recalled.set(None);
+                                    input.set(event.target().value());
+                                    sync_column();
+                                }
+                                on:keyup=move |_| sync_column()
+                                on:click=move |_| sync_column()
+                                on:select=move |_| sync_column()
+                                on:keydown=on_keydown
+                            />
+                            // The block cursor, drawn at the real caret column.
+                            // The native caret is hidden in CSS.
+                            <span
+                                class="cursor"
+                                aria-hidden="true"
+                                style:left=move || format!("{}ch", column.get())
+                            >
+                                "_"
+                            </span>
+                        </span>
+                    </p>
+                </Show>
                 <div node_ref=bottom_ref></div>
             </div>
 
             // Pointerdown with the default prevented, so focus never leaves the
             // input and the on-screen keyboard stays up.
-            <div class="keys">
-                <button
-                    class="key"
-                    type="button"
-                    on:pointerdown=move |event| {
-                        event.prevent_default();
-                        complete();
-                    }
-                >
-                    "tab"
-                </button>
-                <button
-                    class="key"
-                    type="button"
-                    on:pointerdown=move |event| {
-                        event.prevent_default();
-                        recall(true);
-                    }
-                >
-                    "up"
-                </button>
-                <button
-                    class="key"
-                    type="button"
-                    on:pointerdown=move |event| {
-                        event.prevent_default();
-                        recall(false);
-                    }
-                >
-                    "down"
-                </button>
-            </div>
+            <Show when=move || !closed.get()>
+                <div class="keys">
+                    <button
+                        class="key"
+                        type="button"
+                        on:pointerdown=move |event| {
+                            event.prevent_default();
+                            complete();
+                        }
+                    >
+                        "tab"
+                    </button>
+                    <button
+                        class="key"
+                        type="button"
+                        on:pointerdown=move |event| {
+                            event.prevent_default();
+                            recall(true);
+                        }
+                    >
+                        "up"
+                    </button>
+                    <button
+                        class="key"
+                        type="button"
+                        on:pointerdown=move |event| {
+                            event.prevent_default();
+                            recall(false);
+                        }
+                    >
+                        "down"
+                    </button>
+                </div>
+            </Show>
         </main>
     }
 }
