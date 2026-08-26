@@ -263,9 +263,11 @@ a:focus-visible,
 }
 
 @media (hover: none) and (pointer: coarse) {
-  /* Clear the fixed key row at the bottom. */
+  /* Clear the fixed key row at the bottom: 57px of row, being a 44px button,
+     6px of padding above and below, and the border, plus 12px of gap so the
+     last line does not sit flush against it. */
   .tty {
-    padding-bottom: 64px;
+    padding-bottom: 69px;
   }
 
   .keys {
@@ -281,12 +283,17 @@ a:focus-visible,
 
 .key {
   flex: 1 1 0;
-  padding: 10px 0;
+  /* 44px tall including the border, the smallest target a thumb hits
+     reliably. The row is the only thing on the page meant to be tapped. */
+  min-height: 44px;
+  padding: 0;
   border: 1px solid var(--dim);
   background: transparent;
   color: var(--fg);
   font: inherit;
   cursor: pointer;
+  /* No double-tap-to-zoom, so repeated taps on `up` register as taps. */
+  touch-action: manipulation;
 }
 
 .key:active {

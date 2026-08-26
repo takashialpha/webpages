@@ -89,14 +89,10 @@ pub fn Terminal(children: Children) -> impl IntoView {
     let input_ref = NodeRef::<html::Input>::new();
     let bottom_ref = NodeRef::<html::Div>::new();
 
-    let prompt = move || {
-        format!(
-            "{}@{}:{}$",
-            crate::USER,
-            crate::site_host(),
-            session.get().prompt_path()
-        )
-    };
+    // Only the path moves, so that is the only part the live prompt rebuilds.
+    // `user@host` is fixed, and renders as fixed markup: see the note there.
+    let prompt_tail = move || format!(":{}$", session.get().prompt_path());
+    let prompt = move || format!("{}@{}{}", crate::USER, crate::site_host(), prompt_tail());
 
     let focus_input = move || {
         if let Some(element) = input_ref.get() {
@@ -126,8 +122,10 @@ pub fn Terminal(children: Children) -> impl IntoView {
         }
     });
 
-    // Keep the prompt in view as output accumulates, and when the on-screen
-    // keyboard opens and shrinks the viewport out from under it.
+    // Keep the prompt in view as output accumulates. The on-screen keyboard is
+    // not this effect's job: it fires on new output, and opening the keyboard
+    // produces none. The viewport meta handles that case, by shrinking the
+    // layout viewport so the prompt is never behind the keyboard to begin with.
     Effect::new(move |_| {
         scrollback.track();
         if let Some(bottom) = bottom_ref.get() {
@@ -281,7 +279,19 @@ pub fn Terminal(children: Children) -> impl IntoView {
                 // misreports where typing will land.
                 <Show when=move || !closed.get()>
                     <p class="line current">
-                        <span class="prompt">{prompt}</span>
+                        // Split so that no single text node holds anything
+                        // shaped like an email address. Cloudflare rewrites
+                        // any that does into a link it decodes on load, which
+                        // left this prompt as two nodes where the server sent
+                        // one. Hydration bound to the first, and every `cd`
+                        // wrote the new prompt there while the stale tail sat
+                        // beside it: `guest@host:~/projects$:~$`.
+                        <span class="prompt">
+                            <span>{crate::USER}</span>
+                            "@"
+                            <span>{crate::site_host()}</span>
+                            {prompt_tail}
+                        </span>
                         <span class="field">
                             <input
                                 class="stdin"
@@ -290,6 +300,9 @@ pub fn Terminal(children: Children) -> impl IntoView {
                                 autocapitalize="off"
                                 autocomplete="off"
                                 spellcheck="false"
+                                // Labels the phone's return key "go" rather
+                                // than "return", since it runs the command.
+                                enterkeyhint="go"
                                 aria-label="terminal input"
                                 prop:value=move || input.get()
                                 // The prompt is the one place a click should

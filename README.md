@@ -43,7 +43,7 @@ Produces the server binary in `target/release` and the site assets in `target/si
 
 Every push to `main` publishes a rolling [`build`](https://github.com/takashialpha/webpages/releases/tag/build) release carrying `webpages-x86_64-linux.tar.gz` and its `.sha256`. The archive holds the server binary next to `hash.txt` and a `site` directory, already laid out the way the environment variables below expect.
 
-Extract it whole rather than copying pieces out of it. All three are one build and have to move together: `hash.txt` maps the content-hashed bundle names, and the server looks for it **beside the binary**, not under the site root. Leave it behind and the site answers 200 while every asset 404s, which no plain uptime check will catch. Set `LEPTOS_HASH_FILE_NAME` to an absolute path if your layout cannot keep the two adjacent.
+Extract it whole rather than copying pieces out of it. All three are one build and have to move together: `hash.txt` maps the content-hashed bundle names, and the server looks for it **beside the binary**, not under the site root. Leave it behind and the process still starts, then panics on the first render and serves nothing, so a proxy in front answers 502. Set `LEPTOS_HASH_FILE_NAME` to an absolute path if your layout cannot keep the two adjacent.
 
 There are no version tags; the latest build is always whatever is in `main`.
 
@@ -77,7 +77,7 @@ Each request then gets a single line with its method, path, status, and how long
 
 The format follows where stdout goes. Color is used only when stdout is a terminal, and the timestamp is left out when systemd owns stdout, because journald records its own timestamp for every line.
 
-At startup the server also reports the two ways a deploy can come up looking healthy while serving broken pages: `LEPTOS_SITE_ROOT` not pointing at a directory, and `hash.txt` missing from beside the binary. The second is an `ERROR` and names the exact path it looked at, because the page still renders and returns 200 either way.
+At startup the server also reports the two ways a deploy can start cleanly and still be broken: `LEPTOS_SITE_ROOT` not pointing at a directory, which serves pages with no CSS or WASM, and `hash.txt` missing from beside the binary, which panics on every render and serves nothing at all. Both are checked before the listener opens, and the second is an `ERROR` naming the exact path it looked at, since the process itself gives no other clue.
 
 ## Time
 

@@ -150,15 +150,16 @@ async fn main() -> std::process::ExitCode {
         );
     }
 
-    // The other quiet one, and the one that actually bit in production. Leptos
+    // The other one, and the one that actually bit in production. Leptos
     // resolves the content-hashed bundle names through this file and looks for
-    // it beside the binary, not under the site root. Without it the server
-    // falls back to unhashed names that were never built, so every asset 404s
-    // while the page itself still renders and answers 200.
+    // it beside the binary, not under the site root. Leave it behind and every
+    // render panics on the unguarded read in leptos, so the connection drops
+    // and a proxy in front answers 502. Nothing is served at all.
     //
-    // Logged rather than fatal: setting `LEPTOS_HASH_FILES` against a build
-    // that did not hash its bundles is a misconfiguration, but a working one.
-    // Verifying the page's assets actually resolve is the deploy's job.
+    // Logged rather than fatal because the file is read lazily, on the first
+    // render: the process would come up either way, and refusing to start here
+    // would only move the same failure earlier. Saying so at startup is what
+    // turns a bare 502 into something with a cause attached.
     if leptos_options.hash_files {
         let beside_binary = std::env::current_exe()
             .ok()
@@ -170,8 +171,8 @@ async fn main() -> std::process::ExitCode {
             // otherwise indistinguishable from the file simply being elsewhere.
             Some(path) => error!(
                 path = %path.display(),
-                "hash file not found, every bundle asset will 404; put it there \
-                 or point LEPTOS_HASH_FILE_NAME at it",
+                "hash file not found, every render will panic and serve nothing; \
+                 put it there or point LEPTOS_HASH_FILE_NAME at it",
             ),
             None => error!("cannot locate this binary, so the hash file cannot be found"),
         }

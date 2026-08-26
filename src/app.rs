@@ -33,7 +33,17 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
         >
             <head>
                 <meta charset="utf-8"/>
-                <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                // `interactive-widget` is what keeps the on-screen keyboard
+                // from burying the key row. By default a virtual keyboard
+                // shrinks only the visual viewport, so a fixed element still
+                // sits against the bottom of the layout viewport, behind the
+                // keys. Resizing the content instead shrinks the layout
+                // viewport, which is also what makes `100dvh` mean the part of
+                // the screen you can actually see.
+                <meta
+                    name="viewport"
+                    content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
+                />
                 <meta name="theme-color" content="#000000"/>
                 <AutoReload options=options.clone()/>
                 // Resolves the content-hashed stylesheet name from `hash.txt`,
