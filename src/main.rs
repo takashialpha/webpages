@@ -150,19 +150,30 @@ async fn main() -> std::process::ExitCode {
         );
     }
 
-    // The other quiet one. Leptos looks for the hash file beside the binary,
-    // not under the site root, and falls back to unhashed bundle names that
-    // cargo-leptos never wrote, so the page arrives with no CSS and no
-    // hydration. Mirror that lookup rather than guessing at the path.
+    // The other quiet one, and the one that actually bit in production. Leptos
+    // resolves the content-hashed bundle names through this file and looks for
+    // it beside the binary, not under the site root. Without it the server
+    // falls back to unhashed names that were never built, so every asset 404s
+    // while the page itself still renders and answers 200.
+    //
+    // Logged rather than fatal: setting `LEPTOS_HASH_FILES` against a build
+    // that did not hash its bundles is a misconfiguration, but a working one.
+    // Verifying the page's assets actually resolve is the deploy's job.
     if leptos_options.hash_files {
         let beside_binary = std::env::current_exe()
             .ok()
             .and_then(|exe| exe.parent().map(|dir| dir.join(&*leptos_options.hash_file)));
-        if !beside_binary.is_some_and(|path| path.is_file()) {
-            warn!(
-                hash_file = %leptos_options.hash_file,
-                "hash file is missing beside the binary, the bundle will not load",
-            );
+
+        match beside_binary {
+            Some(path) if path.is_file() => {}
+            // Naming the path it looked at is the whole point: the failure is
+            // otherwise indistinguishable from the file simply being elsewhere.
+            Some(path) => error!(
+                path = %path.display(),
+                "hash file not found, every bundle asset will 404; put it there \
+                 or point LEPTOS_HASH_FILE_NAME at it",
+            ),
+            None => error!("cannot locate this binary, so the hash file cannot be found"),
         }
     }
 
