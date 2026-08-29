@@ -18,6 +18,10 @@ The login banner does not keep its own copy of the intro. It renders the first p
 
 `help` lists them, generated from the registry in `src/commands.rs` rather than written out, so it cannot fall behind. Adding a command is one entry in `COMMANDS` and one function.
 
+Each entry carries a `Spec` saying which options the command takes and how many operands, and `src/args.rs` checks the line against it before the function runs. No command parses its own arguments, so none of them can quietly ignore what they were given: an unknown option, a missing operand, and one operand too many all stop in the same place and report the same way. Options may be clustered, `--` ends them, and a lone `-` is an operand, which is what lets `cd -` name a directory.
+
+The same spec is what `help <command>` prints and what tab completion offers after a `-`, so usage text, completion, and what actually runs are one thing. Every command takes `-h`.
+
 ## Prerequisites
 
 1. WASM target: `rustup target add wasm32-unknown-unknown`
@@ -82,6 +86,16 @@ At startup the server also reports the two ways a deploy can start cleanly and s
 ## Time
 
 `date` and `uptime` answer with the server's clock, not the browser's. The server stamps its UTC time and uptime onto the document, and the browser only measures how long the page has been open, so a visitor with a skewed system clock still sees the right time. UTC is formatted in `src/clock.rs` rather than pulled from a date library.
+
+## The screen
+
+The terminal is sized to the visual viewport, not the layout viewport, and `src/viewport.rs` is what measures it.
+
+Those two are the same thing until a phone raises its keyboard, which shrinks only the visual one. Chrome can be told to keep them together with `interactive-widget=resizes-content` in the viewport meta, which is set, but Safari ignores it, so on iOS the layout viewport carries on behind the keyboard. Anything sized to `100dvh` is then taller than the screen, and anything `position: fixed` to the bottom is pinned somewhere you cannot see.
+
+So the height and the offset of the visual viewport are written onto the document as `--screen-height` and `--screen-top`, and the stylesheet builds the terminal from those. Three things follow from that. The terminal is fixed over the visible area and moves with it, so the page behind it never scrolls, which is the scrolling that drags a fixed element out of place on iOS. `.screen` is the only scroller, sized to what the key row leaves, so the prompt scrolls to a bottom that really is the bottom. And the key row is an ordinary flex item under it rather than an overlay, so nothing has to reserve space for it and it cannot be scrolled away or end up beneath the keyboard.
+
+The extra-keys row itself is tab, up, and down, which a phone keyboard has none of. It renders only on touch devices.
 
 ## Fonts
 

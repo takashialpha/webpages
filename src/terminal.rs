@@ -101,11 +101,16 @@ pub fn Terminal(children: Children) -> impl IntoView {
     };
 
     // Read the caret back out of the input after anything that could move it.
+    // Only writes when it actually moved, since a held key syncs on every
+    // repeat and an unconditional set would redraw the cursor each time.
     let sync_column = move || {
         if let Some(element) = input_ref.get()
             && let Ok(Some(at)) = element.selection_start()
         {
-            column.set(at as usize);
+            let at = at as usize;
+            if column.get_untracked() != at {
+                column.set(at);
+            }
         }
     };
 
@@ -122,16 +127,22 @@ pub fn Terminal(children: Children) -> impl IntoView {
         }
     });
 
-    // Keep the prompt in view as output accumulates. The on-screen keyboard is
-    // not this effect's job: it fires on new output, and opening the keyboard
-    // produces none. The viewport meta handles that case, by shrinking the
-    // layout viewport so the prompt is never behind the keyboard to begin with.
-    Effect::new(move |_| {
-        scrollback.track();
-        if let Some(bottom) = bottom_ref.get() {
+    let scroll_to_prompt = move || {
+        if let Some(bottom) = bottom_ref.get_untracked() {
             bottom.scroll_into_view();
         }
+    };
+
+    // Keep the prompt in view as output accumulates.
+    Effect::new(move |_| {
+        scrollback.track();
+        scroll_to_prompt();
     });
+
+    // And keep it in view when the screen itself changes size, which is what
+    // an on-screen keyboard opening looks like from here. Measuring is also
+    // what gives the terminal its height, so this runs on mount either way.
+    Effect::new(move |_| crate::viewport::track(scroll_to_prompt));
 
     let submit = move || {
         let typed = input.get();
@@ -219,24 +230,33 @@ pub fn Terminal(children: Children) -> impl IntoView {
         );
     };
 
-    let on_keydown = move |event: KeyboardEvent| match event.key().as_str() {
-        "Enter" => {
-            event.prevent_default();
-            submit();
+    let on_keydown = move |event: KeyboardEvent| {
+        match event.key().as_str() {
+            "Enter" => {
+                event.prevent_default();
+                submit();
+            }
+            "Tab" => {
+                event.prevent_default();
+                complete();
+            }
+            "ArrowUp" => {
+                event.prevent_default();
+                recall(true);
+            }
+            "ArrowDown" => {
+                event.prevent_default();
+                recall(false);
+            }
+            _ => {}
         }
-        "Tab" => {
-            event.prevent_default();
-            complete();
-        }
-        "ArrowUp" => {
-            event.prevent_default();
-            recall(true);
-        }
-        "ArrowDown" => {
-            event.prevent_default();
-            recall(false);
-        }
-        _ => {}
+
+        // Moving the caret is this event's default action, which the browser
+        // performs after the handler returns, so the column it lands on can
+        // only be read on the next frame. Holding a key repeats keydown and
+        // sends no keyup until release, which is why reading it on keyup alone
+        // left the drawn cursor behind for as long as the key was down.
+        request_animation_frame(sync_column);
     };
 
     view! {
@@ -314,7 +334,6 @@ pub fn Terminal(children: Children) -> impl IntoView {
                                     input.set(event.target().value());
                                     sync_column();
                                 }
-                                on:keyup=move |_| sync_column()
                                 on:click=move |_| sync_column()
                                 on:select=move |_| sync_column()
                                 on:keydown=on_keydown

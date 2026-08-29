@@ -8,13 +8,6 @@ keywords = ["website", "leptos", "axum", "terminal"]
 categories = ["web-programming"]
 license = "AGPL-3.0-or-later"
 
-# `cargo shear` scans for the crate being named in code, and nothing here names
-# web-sys: it is declared purely to switch on the `Performance` feature, which
-# `leptos::prelude::window().performance()` needs and which leptos does not
-# enable itself. Dropping it fails to compile.
-[package.metadata.cargo-shear]
-ignored = ["web-sys"]
-
 [lib]
 crate-type = ["cdylib", "rlib"]
 
@@ -45,11 +38,15 @@ tracing-subscriber = { version = "0", default-features = false, features = [
   "env-filter",
 ], optional = true }
 wasm-bindgen = { version = "0", optional = true }
-# Declared only to switch on `Performance`, which measures how long the page has
-# been open; nothing in `src/` names this crate. The clock itself comes from the
-# server, see clock.rs. Every other web-sys feature we touch is already on via
-# leptos, and `Performance` is the one that is not.
-web-sys = { version = "0", features = ["Performance"], optional = true }
+# The web-sys features leptos does not already switch on for us. `Performance`
+# measures how long the page has been open, see clock.rs; `VisualViewport`
+# measures the part of the screen a phone keyboard leaves visible, see
+# viewport.rs, and `CssStyleDeclaration` is how that reaches the stylesheet.
+web-sys = { version = "0", features = [
+  "CssStyleDeclaration",
+  "Performance",
+  "VisualViewport",
+], optional = true }
 
 [features]
 hydrate = [

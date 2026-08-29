@@ -1,97 +1,123 @@
 //! The command set, and the registry `help` and tab completion are built from.
 //!
 //! Adding a command is one entry in [`COMMANDS`] and one function. Nothing else
-//! needs touching: `help` lists whatever is here, and completion offers it.
+//! needs touching: `help` lists whatever is here, completion offers it, and the
+//! [`Spec`] on the entry is checked before the function runs, so a command body
+//! only ever sees arguments it declared.
 
+use crate::args::{Args, Flag, Spec, usage};
 use crate::clock;
 use crate::fs::{self, Node};
-use crate::shell::{Command, Line, Output, Session, Span, body, error, line};
+use crate::shell::{Command, Line, Output, Session, Span, body_lines, error, error_line, line};
 use crate::theme;
+
+/// Options are kept to the ones that mean something here. `ls -l` is absent on
+/// purpose: its columns are mode, owner, group, and mtime, and this tree has
+/// none of those to report, so it could only make them up.
+const LS_FLAGS: &[Flag] = &[
+    Flag {
+        short: 'a',
+        long: Some("all"),
+        help: "include . and ..",
+    },
+    Flag {
+        short: '1',
+        long: None,
+        help: "one entry per line",
+    },
+];
+
+const CAT_FLAGS: &[Flag] = &[Flag {
+    short: 'n',
+    long: Some("number"),
+    help: "number the output lines",
+}];
 
 pub const COMMANDS: &[Command] = &[
     Command {
         name: "help",
         summary: "list the commands",
-        usage: "help [command]",
+        spec: Spec::one("command"),
         run: help,
     },
     Command {
         name: "ls",
         summary: "list directory contents",
-        usage: "ls [path]",
+        spec: Spec {
+            flags: LS_FLAGS,
+            min: 0,
+            max: None,
+            operand: "path",
+        },
         run: ls,
     },
     Command {
         name: "cd",
         summary: "change directory",
-        usage: "cd [path]",
+        spec: Spec::one("path"),
         run: cd,
     },
     Command {
         name: "cat",
         summary: "print a file",
-        usage: "cat <file>",
+        spec: Spec {
+            flags: CAT_FLAGS,
+            min: 1,
+            max: None,
+            operand: "file",
+        },
         run: cat,
     },
     Command {
         name: "pwd",
         summary: "print the working directory",
-        usage: "pwd",
+        spec: Spec::NONE,
         run: pwd,
     },
     Command {
         name: "whoami",
         summary: "print the current user",
-        usage: "whoami",
+        spec: Spec::NONE,
         run: whoami,
     },
     Command {
         name: "date",
         summary: "print the current utc time",
-        usage: "date",
+        spec: Spec::NONE,
         run: date,
     },
     Command {
         name: "uptime",
         summary: "how long this server has been up",
-        usage: "uptime",
+        spec: Spec::NONE,
         run: uptime,
     },
     Command {
         name: "theme",
         summary: "switch the palette",
-        usage: "theme [name]",
+        spec: Spec::one("name"),
         run: set_theme,
     },
     Command {
         name: "exit",
         summary: "close the connection",
-        usage: "exit",
+        spec: Spec::NONE,
         run: exit,
     },
     Command {
         name: "clear",
         summary: "clear the screen",
-        usage: "clear",
+        spec: Spec::NONE,
         run: clear,
     },
 ];
 
-fn help(_session: &mut Session, args: &[&str]) -> Output {
+fn help(_session: &mut Session, args: &Args<'_>) -> Output {
     if let Some(name) = args.first() {
         return COMMANDS
             .iter()
-            .find(|command| command.name == *name)
-            .map_or_else(
-                || error(format!("help: no such command: {name}")),
-                |command| {
-                    Output::Lines(vec![
-                        vec![Span::plain(format!("usage: {}", command.usage))],
-                        vec![],
-                        vec![Span::plain(format!("  {}", command.summary))],
-                    ])
-                },
-            );
+            .find(|command| command.name == name)
+            .map_or_else(|| error(format!("help: no such command: {name}")), usage);
     }
 
     let width = COMMANDS
@@ -109,44 +135,99 @@ fn help(_session: &mut Session, args: &[&str]) -> Output {
     }));
     lines.push(vec![]);
     lines.push(vec![Span::new(
+        "every command takes -h for its own usage and options.",
+        "dim",
+    )]);
+    lines.push(vec![Span::new(
         "everything else is a file. run `ls` to look around.",
         "dim",
     )]);
     Output::Lines(lines)
 }
 
-fn ls(session: &mut Session, args: &[&str]) -> Output {
-    let target = args.first().copied().unwrap_or(".");
-    let Some(segments) = fs::resolve(&session.cwd, target) else {
-        return error(format!("ls: {target}: No such file or directory"));
-    };
-    let Some(node) = fs::node_at(&segments) else {
-        return error(format!("ls: {target}: No such file or directory"));
+fn ls(session: &mut Session, args: &Args<'_>) -> Output {
+    let here = ["."];
+    let targets = if args.operands().is_empty() {
+        &here[..]
+    } else {
+        args.operands()
     };
 
-    match *node {
-        // Listing a file names the file, the way `ls` itself does.
-        Node::File(_) => line(target.to_owned()),
-        Node::Dir(entries) => Output::Columns(
-            entries
-                .iter()
-                .map(|entry| match entry.node {
-                    Node::Dir(_) => vec![Span::new(format!("{}/", entry.name), "dir")],
-                    Node::File(_) => vec![Span::plain(entry.name)],
-                })
-                .collect(),
-        ),
+    let mut missing: Vec<Line> = Vec::new();
+    let mut files: Vec<Line> = Vec::new();
+    let mut dirs: Vec<(&str, &'static Node)> = Vec::new();
+
+    for target in targets {
+        match fs::resolve(&session.cwd, target).and_then(|segments| fs::node_at(&segments)) {
+            None => missing.push(error_line(format!(
+                "ls: {target}: No such file or directory"
+            ))),
+            // Naming a file lists the file, the way `ls` itself does.
+            Some(Node::File(_)) => files.push(vec![Span::plain(*target)]),
+            Some(node) => dirs.push((target, node)),
+        }
     }
+
+    // The plain case keeps the grid: one directory, laid out in columns.
+    if missing.is_empty()
+        && files.is_empty()
+        && !args.has('1')
+        && let [(_, node)] = dirs[..]
+    {
+        return Output::Columns(entry_lines(node, args.has('a')));
+    }
+
+    // Anything else is more than one block, and blocks need headers between
+    // them, which a single flowed grid cannot express.
+    let mut lines = missing;
+    lines.extend(files);
+
+    // A header only makes sense when there is more than one thing to tell apart.
+    let labeled = dirs.len() > 1 || !lines.is_empty();
+    for (name, node) in dirs {
+        if !lines.is_empty() {
+            lines.push(vec![]);
+        }
+        if labeled {
+            lines.push(vec![Span::plain(format!("{name}:"))]);
+        }
+        lines.extend(entry_lines(node, args.has('a')));
+    }
+
+    Output::Lines(lines)
 }
 
-fn cd(session: &mut Session, args: &[&str]) -> Output {
-    let target = args.first().copied().unwrap_or("~");
+/// One line per entry, directories marked with a trailing slash.
+fn entry_lines(node: &Node, all: bool) -> Vec<Line> {
+    let mut lines: Vec<Line> = Vec::new();
+    if all {
+        lines.push(vec![Span::new("./", "dir")]);
+        lines.push(vec![Span::new("../", "dir")]);
+    }
+    lines.extend(node.entries().iter().map(|entry| match entry.node {
+        Node::Dir(_) => vec![Span::new(format!("{}/", entry.name), "dir")],
+        Node::File(_) => vec![Span::plain(entry.name)],
+    }));
+    lines
+}
+
+fn cd(session: &mut Session, args: &Args<'_>) -> Output {
+    let target = args.first().unwrap_or("~");
+
+    // `cd -` goes back where it came from and prints where that was, the way
+    // bash does. It is why a lone dash is parsed as an operand.
+    if target == "-" {
+        let back = std::mem::take(&mut session.prev);
+        session.prev = std::mem::replace(&mut session.cwd, back);
+        return line(session.prompt_path());
+    }
+
     let Some(segments) = fs::resolve(&session.cwd, target) else {
         return error(format!("cd: {target}: No such file or directory"));
     };
     match fs::node_at(&segments) {
         Some(Node::Dir(_)) => {
-            session.cwd = segments;
+            session.prev = std::mem::replace(&mut session.cwd, segments);
             Output::Nothing
         }
         Some(Node::File(_)) => error(format!("cd: {target}: Not a directory")),
@@ -154,38 +235,51 @@ fn cd(session: &mut Session, args: &[&str]) -> Output {
     }
 }
 
-fn cat(session: &mut Session, args: &[&str]) -> Output {
-    let Some(target) = args.first().copied() else {
-        return error("cat: missing operand");
-    };
-    let Some(segments) = fs::resolve(&session.cwd, target) else {
-        return error(format!("cat: {target}: No such file or directory"));
-    };
-    match fs::node_at(&segments) {
-        Some(Node::File(text)) => body(text),
-        Some(Node::Dir(_)) => error(format!("cat: {target}: Is a directory")),
-        None => error(format!("cat: {target}: No such file or directory")),
+fn cat(session: &mut Session, args: &Args<'_>) -> Output {
+    let mut lines: Vec<Line> = Vec::new();
+    // Numbering runs across the whole output rather than restarting per file,
+    // which is what `cat -n` on several files does.
+    let mut numbered = 0_usize;
+
+    for target in args.operands() {
+        match fs::resolve(&session.cwd, target).and_then(|segments| fs::node_at(&segments)) {
+            Some(Node::File(text)) => {
+                for mut line in body_lines(text) {
+                    if args.has('n') {
+                        numbered += 1;
+                        line.insert(0, Span::new(format!("{numbered:>6}  "), "dim"));
+                    }
+                    lines.push(line);
+                }
+            }
+            Some(Node::Dir(_)) => lines.push(error_line(format!("cat: {target}: Is a directory"))),
+            None => lines.push(error_line(format!(
+                "cat: {target}: No such file or directory"
+            ))),
+        }
     }
+
+    Output::Lines(lines)
 }
 
-fn pwd(session: &mut Session, _args: &[&str]) -> Output {
+fn pwd(session: &mut Session, _args: &Args<'_>) -> Output {
     line(session.prompt_path())
 }
 
-fn whoami(_session: &mut Session, _args: &[&str]) -> Output {
+fn whoami(_session: &mut Session, _args: &Args<'_>) -> Output {
     line(crate::USER)
 }
 
-const fn exit(_session: &mut Session, _args: &[&str]) -> Output {
+const fn exit(_session: &mut Session, _args: &Args<'_>) -> Output {
     Output::Exit
 }
 
-const fn clear(_session: &mut Session, _args: &[&str]) -> Output {
+const fn clear(_session: &mut Session, _args: &Args<'_>) -> Output {
     Output::Clear
 }
 
-fn set_theme(_session: &mut Session, args: &[&str]) -> Output {
-    let Some(name) = args.first().copied() else {
+fn set_theme(_session: &mut Session, args: &Args<'_>) -> Output {
+    let Some(name) = args.first() else {
         let current = theme::current();
         let mut lines: Vec<Line> = vec![vec![Span::new("palettes", "dim")], vec![]];
         lines.extend(theme::PALETTES.iter().map(|palette| {
@@ -208,11 +302,11 @@ fn set_theme(_session: &mut Session, args: &[&str]) -> Output {
     )
 }
 
-fn date(_session: &mut Session, _args: &[&str]) -> Output {
+fn date(_session: &mut Session, _args: &Args<'_>) -> Output {
     line(clock::format_utc(clock::now_millis()))
 }
 
-fn uptime(_session: &mut Session, _args: &[&str]) -> Output {
+fn uptime(_session: &mut Session, _args: &Args<'_>) -> Output {
     line(format!("up {}", format_duration(clock::uptime_secs())))
 }
 

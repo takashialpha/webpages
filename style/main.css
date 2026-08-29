@@ -71,8 +71,13 @@
 
 html,
 body {
+  height: 100%;
   margin: 0;
   padding: 0;
+  /* The terminal is fixed to the visible viewport, so the page behind it has
+     nothing to scroll. On ios it is that page scroll which drags a fixed
+     element out of position and leaves it behind until the gesture ends. */
+  overflow: hidden;
 }
 
 body {
@@ -101,14 +106,17 @@ body {
    furniture anywhere. Text fills from the top, and once it overflows the older
    lines run off above. Wheel and touch still scroll back through them. */
 .tty {
+  /* Sized to the visual viewport rather than the layout one, because those come
+     apart the moment a phone raises its keyboard, and only the visual one is
+     the screen you can see. viewport.rs measures it; `100dvh` is the fallback
+     until it has. */
+  position: fixed;
+  top: var(--screen-top, 0);
+  left: 0;
+  right: 0;
+  height: var(--screen-height, 100dvh);
   display: flex;
   flex-direction: column;
-  /* dvh, because the mobile url bar makes vh wrong. */
-  height: 100dvh;
-  padding: 12px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
   cursor: text;
   /* There is no mouse on a tty. Clicks hand the keyboard back instead of
      starting a selection, so the shell never quietly stops listening. Links and
@@ -123,14 +131,22 @@ body {
   user-select: text;
 }
 
-.tty::-webkit-scrollbar {
-  display: none;
-}
-
+/* The one scroller on the page. It takes whatever height the key row leaves,
+   so output never runs on underneath the row and the prompt scrolls to a
+   bottom that really is the bottom. */
 .screen {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  padding: 12px;
   /* A console fills from the top and only reaches the bottom once it has
      scrolled, so nothing pins the prompt down there. */
   max-width: 84ch;
+}
+
+.screen::-webkit-scrollbar {
+  display: none;
 }
 
 .line {
@@ -263,16 +279,12 @@ a:focus-visible,
 }
 
 @media (hover: none) and (pointer: coarse) {
-  /* Clear the fixed key row at the bottom: 57px of row, being a 44px button,
-     6px of padding above and below, and the border, plus 12px of gap so the
-     last line does not sit flush against it. */
-  .tty {
-    padding-bottom: 69px;
-  }
-
+  /* A flex item under the screen, not an overlay on top of it. Nothing has to
+     reserve space for it, it cannot be scrolled away, and it cannot land under
+     the keyboard, because the box it sits in is only ever as tall as the part
+     of the screen you can see. */
   .keys {
-    position: fixed;
-    inset: auto 0 0 0;
+    flex: 0 0 auto;
     display: flex;
     gap: 1px;
     padding: 6px;

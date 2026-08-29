@@ -3,6 +3,7 @@
 #![recursion_limit = "256"]
 
 pub mod app;
+pub mod args;
 pub mod clock;
 pub mod commands;
 pub mod fs;
@@ -10,6 +11,7 @@ pub mod seo;
 pub mod shell;
 pub mod terminal;
 pub mod theme;
+pub mod viewport;
 
 /// Canonical origin of the deployed site. Used to build absolute URLs for the
 /// canonical link, Open Graph tags, and the sitemap.

@@ -4,6 +4,7 @@
 //! completion are both generated from the same slice and cannot fall out of step
 //! with what actually runs.
 
+use crate::args::{Args, Spec};
 use crate::commands::COMMANDS;
 use crate::fs;
 
@@ -51,11 +52,16 @@ pub enum Output {
 #[derive(Clone)]
 pub struct Session {
     pub cwd: Vec<&'static str>,
+    /// Where it was before the last `cd`, which is where `cd -` goes back to.
+    pub prev: Vec<&'static str>,
 }
 
 impl Session {
     pub const fn new() -> Self {
-        Self { cwd: Vec::new() }
+        Self {
+            cwd: Vec::new(),
+            prev: Vec::new(),
+        }
     }
 
     /// The working directory as the prompt shows it.
@@ -75,7 +81,12 @@ impl Default for Session {
 /// Terminal emulators make URLs clickable, so this is the one place output
 /// stops being inert text. Everything else on the page is typed, not clicked.
 pub fn body(text: &str) -> Output {
-    Output::Lines(text.trim_end().lines().map(linkify).collect())
+    Output::Lines(body_lines(text))
+}
+
+/// The lines [`body`] would print, for a command that decorates them first.
+pub fn body_lines(text: &str) -> Vec<Line> {
+    text.trim_end().lines().map(linkify).collect()
 }
 
 /// A single unstyled line.
@@ -85,10 +96,12 @@ pub fn line(text: impl Into<String>) -> Output {
 
 /// A shell-style error, named after the shell the site is pretending to be.
 pub fn error(text: impl Into<String>) -> Output {
-    Output::Lines(vec![vec![Span::new(
-        format!("swagsh: {}", text.into()),
-        "err",
-    )]])
+    Output::Lines(vec![error_line(text)])
+}
+
+/// One error line, for the errors that carry a second line under them.
+pub fn error_line(text: impl Into<String>) -> Line {
+    vec![Span::new(format!("swagsh: {}", text.into()), "err")]
 }
 
 /// Finds bare `http://` and `https://` runs and splits them into link spans.
@@ -132,13 +145,16 @@ pub fn run(session: &mut Session, input: &str) -> Output {
     };
     let args: Vec<&str> = parts.collect();
 
-    COMMANDS
-        .iter()
-        .find(|command| command.name == name)
-        .map_or_else(
-            || error(format!("command not found: {name}")),
-            |command| (command.run)(session, &args),
-        )
+    let Some(command) = COMMANDS.iter().find(|command| command.name == name) else {
+        return error(format!("command not found: {name}"));
+    };
+
+    match crate::args::parse(command, &args) {
+        Ok(parsed) => (command.run)(session, &parsed),
+        // Either the line was rejected or `-h` was asked for; both are already
+        // formatted, so there is nothing left to decide here.
+        Err(output) => output,
+    }
 }
 
 /// A command: one entry in [`COMMANDS`] and one function.
@@ -146,9 +162,10 @@ pub struct Command {
     pub name: &'static str,
     /// One line, shown by `help`.
     pub summary: &'static str,
-    /// Argument shape, shown by `help <name>`.
-    pub usage: &'static str,
-    pub run: fn(&mut Session, &[&str]) -> Output,
+    /// What the command accepts. Enforced before `run` is called, and read by
+    /// `help` and tab completion, so the three cannot disagree.
+    pub spec: Spec,
+    pub run: fn(&mut Session, &Args<'_>) -> Output,
 }
 
 /// The result of pressing Tab.
@@ -172,6 +189,8 @@ pub fn complete(session: &Session, input: &str) -> Completion {
             .map(|command| command.name.to_owned())
             .filter(|name| name.starts_with(word))
             .collect::<Vec<_>>()
+    } else if word.starts_with('-') {
+        flag_candidates(head, word)
     } else {
         path_candidates(session, word)
     };
@@ -204,6 +223,27 @@ pub fn complete(session: &Session, input: &str) -> Completion {
             Vec::new()
         },
     }
+}
+
+/// Completions for a partial option, read from the spec of whichever command
+/// the line starts with. Every command takes `-h`, so that is offered too.
+fn flag_candidates(head: &str, word: &str) -> Vec<String> {
+    let Some(name) = head.split_whitespace().next() else {
+        return Vec::new();
+    };
+    let Some(command) = COMMANDS.iter().find(|command| command.name == name) else {
+        return Vec::new();
+    };
+
+    let mut candidates = vec!["-h".to_owned(), "--help".to_owned()];
+    for flag in command.spec.flags {
+        candidates.push(format!("-{}", flag.short));
+        if let Some(long) = flag.long {
+            candidates.push(format!("--{long}"));
+        }
+    }
+    candidates.retain(|candidate| candidate.starts_with(word));
+    candidates
 }
 
 /// Completions for a partial path, relative to the working directory.
