@@ -1,8 +1,8 @@
 //! The command set.
 //!
 //! Adding one is an entry in [`COMMANDS`] and a function. `help` lists it,
-//! completion offers it, and its [`Spec`] is checked before it runs, so a
-//! command body only sees arguments it declared.
+//! completion offers it, and its [`Spec`] is checked first, so a command only
+//! ever sees arguments it declared.
 
 use crate::args::{Args, Completes, Flag, Spec, usage};
 use crate::clock;
@@ -13,8 +13,8 @@ use crate::shell::{
 use crate::theme;
 use crate::wall;
 
-/// `ls -l` is absent on purpose: its columns are mode, owner, group and
-/// mtime, and this tree has none of them to report.
+/// No `-l`: its columns are mode, owner, group and mtime, and this tree has
+/// none of them.
 const LS_FLAGS: &[Flag] = &[
     Flag {
         short: 'a',
@@ -192,9 +192,8 @@ fn ls(session: &mut Session, args: &Args<'_>) -> Output {
             None => missing.push(error_line(format!(
                 "ls: {target}: No such file or directory"
             ))),
-            // Naming a file lists the file, the way `ls` itself does. A live
-            // file is still a file: listing it says its name, and reading it is
-            // `cat`'s job.
+            // Naming a file lists the file, the way `ls` does. A live file is
+            // still a file; reading it is `cat`'s job.
             Some(Node::File(_) | Node::Live(_) | Node::Program(_)) => {
                 files.push(vec![Span::plain(*target)]);
             }
@@ -202,7 +201,7 @@ fn ls(session: &mut Session, args: &Args<'_>) -> Output {
         }
     }
 
-    // The plain case keeps the grid: one directory, laid out in columns.
+    // The plain case keeps the grid: one directory, in columns.
     if missing.is_empty()
         && files.is_empty()
         && !args.has('1')
@@ -211,12 +210,12 @@ fn ls(session: &mut Session, args: &Args<'_>) -> Output {
         return Output::Columns(entry_lines(node, args.has('a')));
     }
 
-    // Anything else is more than one block, and blocks need headers between
-    // them, which a single flowed grid cannot express.
+    // Anything else is several blocks, and blocks need headers between them,
+    // which one flowed grid cannot do.
     let mut lines = missing;
     lines.extend(files);
 
-    // A header only makes sense when there is more than one thing to tell apart.
+    // Only worth a header when there is more than one thing to tell apart.
     let labeled = dirs.len() > 1 || !lines.is_empty();
     for (name, node) in dirs {
         if !lines.is_empty() {
@@ -240,8 +239,7 @@ fn entry_lines(node: &Node, all: bool) -> Vec<Line> {
     }
     lines.extend(node.entries().iter().map(|entry| match entry.node {
         Node::Dir(_) => vec![Span::new(format!("{}/", entry.name), "dir")],
-        // Runnable, so it is coloured the way `ls` colours anything you can
-        // run rather than read.
+        // Coloured the way `ls` colours anything you run rather than read.
         Node::Program(_) => vec![Span::new(entry.name, "accent")],
         Node::File(_) | Node::Live(_) => vec![Span::plain(entry.name)],
     }));
@@ -251,8 +249,8 @@ fn entry_lines(node: &Node, all: bool) -> Vec<Line> {
 fn cd(session: &mut Session, args: &Args<'_>) -> Output {
     let target = args.first().unwrap_or("~");
 
-    // `cd -` goes back where it came from and prints where that was, the way
-    // bash does. It is why a lone dash is parsed as an operand.
+    // `cd -` goes back and says where, the way bash does. It is why a lone
+    // dash parses as an operand.
     if target == "-" {
         let back = std::mem::take(&mut session.prev);
         session.prev = std::mem::replace(&mut session.cwd, back);
@@ -274,10 +272,10 @@ fn cd(session: &mut Session, args: &Args<'_>) -> Output {
     }
 }
 
-/// One operand of a `cat`, resolved but not rendered.
+/// One operand of a `cat`, looked up but not yet printed.
 ///
-/// A plan, because a live file has to be fetched and the operands after it
-/// still have to come out in order.
+/// A plan, because a live file has to be fetched and everything after it still
+/// has to come out in order.
 enum Piece {
     Text(&'static str),
     Live(Live),
@@ -296,8 +294,7 @@ fn cat(session: &mut Session, args: &Args<'_>) -> Output {
                 Some(Node::Dir(_)) => {
                     Piece::Failed(error_line(format!("cat: {target}: Is a directory")))
                 }
-                // Not text, so there is nothing to print. What it is instead
-                // is `ls`'s business, not `cat`'s.
+                // Nothing to print. What it is instead is `ls`'s business.
                 Some(Node::Program(_)) => {
                     Piece::Failed(error_line(format!("cat: {target}: is a binary file")))
                 }
@@ -312,9 +309,8 @@ fn cat(session: &mut Session, args: &Args<'_>) -> Output {
         return Output::Lines(spell(&plan, "", numbered));
     }
 
-    // Something in there has to be fetched, so the whole thing answers later.
-    // The board is the only live file, so one request covers however many times
-    // it was named.
+    // Something has to be fetched, so the whole thing answers later. The board
+    // is the only live file, so one request covers every mention of it.
     pending(move |sink| {
         let plan: Vec<Piece> = plan.iter().map(Piece::clone_ref).collect();
         leptos::task::spawn_local(async move {
@@ -328,7 +324,7 @@ fn cat(session: &mut Session, args: &Args<'_>) -> Output {
 }
 
 impl Piece {
-    /// Cheap enough to copy: the text is `'static` and a failure is a line.
+    /// Cheap to copy: the text is `'static` and a failure is one line.
     fn clone_ref(&self) -> Self {
         match *self {
             Self::Text(text) => Self::Text(text),
@@ -346,8 +342,8 @@ fn spell(plan: &[Piece], board: &str, numbered: bool) -> Vec<Line> {
     for piece in plan {
         let body = match *piece {
             Piece::Text(text) => body_lines(text),
-            // Raw, the way `cat` reads any other file. The frame and the axes
-            // belong to `wall`, which is the thing that draws it.
+            // Raw, the way `cat` reads anything. The frame and the axes
+            // belong to `wall`, which is what draws it.
             Piece::Live(Live::Wall) => board.lines().map(|row| vec![Span::plain(row)]).collect(),
             Piece::Failed(ref line) => vec![line.clone()],
         };
@@ -403,16 +399,15 @@ fn set_theme(_session: &mut Session, args: &Args<'_>) -> Output {
     )
 }
 
-/// `wall` reads the board, `wall <x> <y> <char>` writes one cell of it.
+/// `wall` reads the board, `wall <x> <y> <char>` writes one cell.
 ///
-/// Both answer later, because both are a request to the server. The entry is
-/// already in the scrollback by then and the prompt never waits.
+/// Both answer later, since both are a request. The entry is in the scrollback
+/// by then and the prompt never waits.
 fn graffiti(_session: &mut Session, args: &Args<'_>) -> Output {
     let write = match *args.operands() {
         [] => None,
-        // Coordinates and nothing else clears the cell. The line was split on
-        // whitespace before it got here, so a space cannot arrive as an
-        // argument, and leaving it out is the way to ask for one.
+        // Coordinates alone clear the cell. The line was split on whitespace,
+        // so a space cannot arrive as an argument: leaving it out asks for one.
         [x, y] => Some(format!("{x} {y}")),
         [x, y, cell] => Some(format!("{x} {y} {cell}")),
         [..] => {
@@ -425,8 +420,8 @@ fn graffiti(_session: &mut Session, args: &Args<'_>) -> Output {
         leptos::task::spawn_local(async move {
             sink.set(match wall::fetch(write.as_deref()).await {
                 Ok((200, board)) => board_lines(&board),
-                // The server explains a refusal in one sentence, and that
-                // sentence is more use than the status code it came with.
+                // The server explains a refusal in a sentence, which is more
+                // use than the status code it came with.
                 Ok((_, complaint)) => error(format!("wall: {}", complaint.trim())),
                 Err(problem) => error(problem),
             });
@@ -434,13 +429,13 @@ fn graffiti(_session: &mut Session, args: &Args<'_>) -> Output {
     })
 }
 
-/// The board in a frame, with its axes outside it.
+/// The board in a frame, with the axes outside it.
 ///
 /// `0,0` is the bottom left and `y` counts up, like the first quadrant of a
-/// graph. The frame uses the box-drawing characters the VGA ROM font carries.
-/// Its width is where the stylesheet's 85 column measure comes from.
+/// graph. The frame is drawn with the box characters the ROM font carries, and
+/// its width is where the stylesheet's 85 column measure comes from.
 fn board_lines(board: &str) -> Output {
-    // Indexed rather than computed, so there is no integer cast in sight.
+    // Indexed rather than computed, so there is no cast anywhere.
     const DIGITS: &[u8; 10] = b"0123456789";
     let digit = |n: usize| char::from(DIGITS[n % 10]);
 
@@ -449,9 +444,9 @@ fn board_lines(board: &str) -> Output {
 
     let mut lines: Vec<Line> = vec![vec![Span::new(format!("{gutter}┌{rule}┐"), "dim")]];
 
-    // The server sends the board top row first, which is already the order it
-    // is drawn in; only the number beside each row is counted the other way,
-    // because the bottom row is row zero.
+    // The server sends the top row first, which is the order it is drawn in.
+    // Only the number beside each row counts the other way, since the bottom
+    // row is row zero.
     lines.extend(
         board
             .lines()
@@ -472,9 +467,8 @@ fn board_lines(board: &str) -> Output {
 
     lines.push(vec![Span::new(format!("{gutter}└{rule}┘"), "dim")]);
 
-    // The x axis sits under the frame, indented past the border so a column
-    // lines up with the cell above it. Tens below units, so a number is read
-    // upwards out of the two rows.
+    // Indented past the border so a column lines up with the cell above it.
+    // Tens below units, so a number reads upwards out of the two rows.
     let axis = format!("{gutter} ");
     let units: String = (0..wall::COLS).map(digit).collect();
     let tens: String = (0..wall::COLS)
@@ -483,8 +477,8 @@ fn board_lines(board: &str) -> Output {
     lines.push(vec![Span::new(format!("{axis}{units}"), "dim")]);
     lines.push(vec![Span::new(format!("{axis}{tens}"), "dim")]);
 
-    // Kept inside the frame's own width: this line shares the box that scrolls
-    // sideways, so a longer one would make the whole board scroll to read it.
+    // Kept inside the frame's width: this shares the box that scrolls
+    // sideways, so a longer line would make the board scroll to read it.
     lines.push(vec![]);
     lines.push(vec![Span::new(
         format!(
@@ -497,7 +491,7 @@ fn board_lines(board: &str) -> Output {
     Output::Wide(lines)
 }
 
-/// Width of the row-number column, including the space after it.
+/// The row-number column, including the space after it.
 const GUTTER: usize = 3;
 
 fn date(_session: &mut Session, _args: &Args<'_>) -> Output {
@@ -508,7 +502,7 @@ fn uptime(_session: &mut Session, _args: &Args<'_>) -> Output {
     line(format!("up {}", format_duration(clock::uptime_secs())))
 }
 
-/// `4 days, 2:11`, the way `uptime` renders it.
+/// `4 days, 2:11`, the way `uptime` says it.
 fn format_duration(total: i64) -> String {
     let days = total / 86_400;
     let hours = (total % 86_400) / 3600;

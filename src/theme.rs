@@ -1,11 +1,11 @@
 //! Palettes, switched by the `theme` command.
 //!
-//! A palette is nothing but a `data-theme` value on the document; the CSS holds
-//! the actual colors. That keeps switching to one attribute write and means a
-//! new palette is a block of custom properties, not code.
+//! A palette is a `data-theme` value and nothing else; the CSS holds the
+//! colours. So switching is one attribute write, and a new palette is a block
+//! of custom properties rather than code.
 //!
-//! Nothing is stored, so a palette lasts for the visit and the next one starts
-//! at the default. A tty does not remember you either.
+//! Nothing is stored, so a palette lasts the visit. A tty does not remember you
+//! either.
 
 pub struct Palette {
     pub name: &'static str,
@@ -35,7 +35,7 @@ fn known(name: &str) -> Option<&'static Palette> {
     PALETTES.iter().find(|palette| palette.name == name)
 }
 
-/// Switches palette, returning `None` if there is no palette by that name.
+/// Switches palette, or `None` if there is no palette by that name.
 #[cfg(feature = "hydrate")]
 pub fn apply(name: &str) -> Option<&'static Palette> {
     let palette = known(name)?;
@@ -56,8 +56,8 @@ pub fn current() -> String {
         .unwrap_or_else(|| DEFAULT.to_owned())
 }
 
-/// The server has no browser to read from, and never runs commands. These exist
-/// so the module compiles into the server build alongside the rest.
+/// The server has no browser to read and never runs commands. These are here
+/// so the module still compiles into it.
 #[cfg(not(feature = "hydrate"))]
 pub fn apply(name: &str) -> Option<&'static Palette> {
     known(name)

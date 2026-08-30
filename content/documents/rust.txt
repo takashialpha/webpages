@@ -6,4 +6,4 @@ i've also spent time in ratatui and servo, and got a few contributions merged in
 
   ratatui            https://github.com/ratatui/ratatui
   servo              https://github.com/servo/servo
-  cf foundations.    https://github.com/cloudflare/foundations
+  cf foundations     https://github.com/cloudflare/foundations

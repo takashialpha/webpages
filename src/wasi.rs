@@ -1,9 +1,9 @@
 //! A WASI preview1 shim, big enough for a terminal program.
 //!
-//! The browser runs the guest; this only provides the imports it asks for. A
+//! The browser runs the guest; this only hands it the imports it asks for. A
 //! `wasm32-wasip1` binary that prints, reads, asks the time and exits needs
 //! exactly the seven below. Nothing else is stubbed: a missing import fails at
-//! instantiation, naming itself, which is where it should be noticed.
+//! instantiation and names itself, which is where it should be noticed.
 //!
 //! WASI has no screen and no keyboard, so a program that draws uses `tty`:
 //!
@@ -34,13 +34,17 @@ const STDIN: u32 = 0;
 const STDOUT: u32 = 1;
 const STDERR: u32 = 2;
 
+/// WASI's wall clock. Everything else it can ask for only counts up, which is
+/// what the page's own clock does.
+const REALTIME: u32 = 0;
+
 /// The host side of a running guest.
 struct Host {
-    /// Filled in after instantiation: the guest's memory is one of its exports,
-    /// so it does not exist yet when the imports are built.
+    /// Filled in after instantiation: memory is one of the guest's exports, so
+    /// it does not exist yet when the imports are built.
     memory: Option<js_sys::WebAssembly::Memory>,
-    /// The screen the guest draws on. Swapped in for the duration of a call and
-    /// swapped back out after, so the terminal keeps ownership of it.
+    /// The screen the guest draws on. Swapped in for a call and back out
+    /// after, so the terminal keeps it.
     screen: Screen,
     /// Keys waiting to be read, oldest first.
     keys: VecDeque<i32>,
@@ -61,8 +65,8 @@ impl Host {
         }
     }
 
-    /// The guest's memory. Rebuilt each time: growing it detaches the old
-    /// buffer, and a stale view reads as empty.
+    /// The guest's memory. Rebuilt each time, because growing it detaches the
+    /// old buffer and a stale view reads as empty.
     fn view(&self) -> Option<js_sys::Uint8Array> {
         self.memory
             .as_ref()
@@ -179,7 +183,7 @@ pub async fn open(url: &str) -> Result<Guest, String> {
     Ok(Guest { host, start, frame })
 }
 
-/// The message out of a thrown JS value, which names the missing import.
+/// The message out of a thrown JS value, which is what names a missing import.
 fn describe(error: &JsValue) -> String {
     js_sys::Reflect::get(error, &JsValue::from_str("message"))
         .ok()
@@ -193,14 +197,13 @@ fn install(module: &js_sys::Object, name: &str, function: &JsValue) {
     let _ = js_sys::Reflect::set(module, &JsValue::from_str(name), function);
 }
 
-/// The imports.
-///
-/// Each closure is handed to JS, which holds it as long as the instance does.
+/// The imports. Each closure is handed to JS, which holds it as long as the
+/// instance does.
 fn build_imports(host: &Rc<RefCell<Host>>) -> js_sys::Object {
     let wasi = js_sys::Object::new();
     let tty = js_sys::Object::new();
 
-    // Gather the iovecs and keep the bytes for the terminal to print.
+    // Gather the iovecs, and keep the bytes for the terminal to print.
     let shared = Rc::clone(host);
     install(
         &wasi,
@@ -228,8 +231,8 @@ fn build_imports(host: &Rc<RefCell<Host>>) -> js_sys::Object {
         .into_js_value(),
     );
 
-    // Nothing to read: a guest asking for a line gets end of file rather
-    // than blocking, because nothing here could unblock it.
+    // Nothing to read, so a guest asking for a line gets end of file. Blocking
+    // would be worse: nothing here could unblock it.
     let shared = Rc::clone(host);
     install(
         &wasi,
@@ -246,7 +249,7 @@ fn build_imports(host: &Rc<RefCell<Host>>) -> js_sys::Object {
         .into_js_value(),
     );
 
-    // No environment. Both calls must agree, or a guest sizes a buffer from
+    // No environment. The two have to agree, or a guest sizes a buffer from
     // the first and overruns it.
     let shared = Rc::clone(host);
     install(
@@ -266,15 +269,21 @@ fn build_imports(host: &Rc<RefCell<Host>>) -> js_sys::Object {
         &Closure::<dyn FnMut(u32, u32) -> u32>::new(|_environ: u32, _buf: u32| OK).into_js_value(),
     );
 
-    // The server's clock, like the rest of the site. `precision` arrives as
-    // a BigInt, so it is taken untyped and ignored.
+    // The wall clock is the server's, like the rest of the site. Everything
+    // else is how long the page has been open, which is monotonic and has more
+    // than millisecond resolution, so a guest timing itself gets a real answer.
+    // `precision` arrives as a BigInt, so it is taken untyped and ignored.
     let shared = Rc::clone(host);
     install(
         &wasi,
         "clock_time_get",
         &Closure::<dyn FnMut(u32, JsValue, u32) -> u32>::new(
-            move |_id: u32, _precision: JsValue, out: u32| {
-                let nanos = crate::clock::now_millis().unsigned_abs() * 1_000_000;
+            move |id: u32, _precision: JsValue, out: u32| {
+                let nanos = if id == REALTIME {
+                    crate::clock::now_millis().unsigned_abs() * 1_000_000
+                } else {
+                    open_for_nanos()
+                };
                 shared.borrow().write(out, &nanos.to_le_bytes());
                 OK
             },
@@ -282,7 +291,7 @@ fn build_imports(host: &Rc<RefCell<Host>>) -> js_sys::Object {
         .into_js_value(),
     );
 
-    // Not the cryptographic sort: a guest wants an unplanned pattern.
+    // Not the cryptographic sort. A guest wants an unplanned pattern.
     let shared = Rc::clone(host);
     install(
         &wasi,
@@ -295,8 +304,8 @@ fn build_imports(host: &Rc<RefCell<Host>>) -> js_sys::Object {
         .into_js_value(),
     );
 
-    // Recorded, not thrown. The guest treats this as never returning and
-    // hits its own unreachable; that trap ends the call. See `Guest::run`.
+    // Recorded, not thrown. The guest treats this as never returning and hits
+    // its own unreachable, and that trap ends the call. See `Guest::run`.
     let shared = Rc::clone(host);
     install(
         &wasi,
@@ -366,6 +375,16 @@ fn build_imports(host: &Rc<RefCell<Host>>) -> js_sys::Object {
     imports
 }
 
+/// How long the page has been open, in nanoseconds.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "`performance.now()` counts up from zero, and no page is open for 500 years"
+)]
+fn open_for_nanos() -> u64 {
+    (crate::clock::since_load_millis() * 1_000_000.0) as u64
+}
+
 /// One unplanned byte.
 #[expect(
     clippy::cast_possible_truncation,
@@ -385,7 +404,7 @@ pub enum Finished {
 }
 
 impl Guest {
-    /// Whether this one draws, rather than printing and exiting.
+    /// Whether it draws, rather than printing and exiting.
     #[must_use]
     pub const fn draws(&self) -> bool {
         self.frame.is_some()
@@ -394,7 +413,7 @@ impl Guest {
     /// Runs a program that prints and exits.
     ///
     /// A trap is the normal ending, since `proc_exit` never returns. The code
-    /// recorded beforehand is what tells a clean exit from a crash.
+    /// recorded just before is what tells a clean exit from a crash.
     pub fn run(&mut self) -> Finished {
         let outcome = self.start.as_ref().map(|start| start.call0(&JsValue::NULL));
 
@@ -409,7 +428,7 @@ impl Guest {
         }
     }
 
-    /// Lends the screen to the guest for one call, and takes it back after.
+    /// Lends the screen to the guest for one call and takes it back after.
     /// Swapped rather than shared, so the terminal owns it between frames.
     fn lending<T>(&self, screen: &mut Screen, call: impl FnOnce() -> T) -> T {
         std::mem::swap(screen, &mut self.host.borrow_mut().screen);
@@ -418,7 +437,7 @@ impl Guest {
         result
     }
 
-    /// Draws one frame. Returns whether the guest is finished.
+    /// One frame. Returns whether the guest is finished.
     ///
     /// Not called `frame`: the trait the terminal drives this through has a
     /// method by that name, and an inherent one would quietly shadow it.
@@ -445,7 +464,7 @@ impl Guest {
         self.host.borrow_mut().out.clear();
     }
 
-    /// Queues a keypress as the bytes a terminal would send.
+    /// Queues a keypress, as the bytes a terminal would send.
     pub fn press(&mut self, key: &str) {
         let mut host = self.host.borrow_mut();
         let mut push = |byte: u8| host.keys.push_back(i32::from(byte));
@@ -456,7 +475,7 @@ impl Guest {
             "Tab" => push(b'\t'),
             "Escape" => push(0x1b),
             // The real escape sequences, so a guest parses what it would
-            // parse anywhere else.
+            // parse in any other terminal.
             "ArrowUp" | "ArrowDown" | "ArrowRight" | "ArrowLeft" => {
                 push(0x1b);
                 push(b'[');

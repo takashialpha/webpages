@@ -6,11 +6,10 @@ use crate::seo::Seo;
 use crate::terminal::Terminal;
 use crate::{short_build, uname};
 
-// The document shell only ever renders on the server; the browser hydrates the
-// body it produced. Keeping it out of the WASM build drops the whole head from
-// the bundle. Gated on `ssr` rather than `not(hydrate)` so that enabling both
-// features at once, as `--all-features` does, still leaves the server binary
-// with a shell to render.
+// Only the server renders the document; the browser hydrates the body it sent.
+// Keeping it out of the wasm build drops the whole head from the bundle. Gated
+// on `ssr` rather than `not(hydrate)` so `--all-features` still leaves the
+// server with a shell to render.
 #[cfg(feature = "ssr")]
 use leptos_meta::{HashedStylesheet, MetaTags};
 
@@ -34,21 +33,20 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             <head>
                 <meta charset="utf-8"/>
                 // `interactive-widget` is what keeps the on-screen keyboard
-                // from burying the key row. By default a virtual keyboard
-                // shrinks only the visual viewport, so a fixed element still
-                // sits against the bottom of the layout viewport, behind the
-                // keys. Resizing the content instead shrinks the layout
-                // viewport, which is also what makes `100dvh` mean the part of
-                // the screen you can actually see.
+                // off the key row. By default a keyboard shrinks only the
+                // visual viewport, so a fixed element stays pinned to the
+                // bottom of the layout one, behind the keys. Resizing the
+                // content shrinks the layout viewport too, which is also what
+                // makes `100dvh` mean the part of the screen you can see.
                 <meta
                     name="viewport"
                     content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
                 />
                 <meta name="theme-color" content="#000000"/>
                 <AutoReload options=options.clone()/>
-                // Resolves the content-hashed stylesheet name from `hash.txt`,
-                // so this cannot be a fixed href. Ahead of the hydration
-                // scripts so the CSS request goes out first.
+                // Looks the hashed stylesheet name up in `hash.txt`, so the
+                // href cannot be written out. Before the hydration scripts, so
+                // the CSS request goes out first.
                 <HashedStylesheet options=options.clone() id="leptos"/>
                 <HydrationScripts options/>
                 <MetaTags/>
@@ -60,9 +58,8 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
     }
 }
 
-/// The login banner, and the only markup the server sends. Everything a crawler
-/// or a visitor without JavaScript sees comes from here, so the prose in the
-/// middle is the site's entire indexable surface.
+/// The login banner, and the only markup the server sends. It is all a crawler
+/// or a visitor without JavaScript ever sees.
 #[component]
 fn Banner() -> impl IntoView {
     view! {
@@ -79,8 +76,8 @@ fn Banner() -> impl IntoView {
                     "https://github.com/takashialpha/webpages"
                 </a>
             </p>
-            // An motd lists what the box runs, which is also the natural place
-            // to credit the people whose work this is built on.
+            // A motd says what the box runs, which is the natural place to
+            // credit the work this is built on.
             <p class="line">
                 <span class="dim">" * built with: "</span>
                 <a href="https://leptos.dev" target="_blank" rel="noreferrer">"leptos"</a>
@@ -99,9 +96,9 @@ fn Banner() -> impl IntoView {
                 <span class="accent">{short_build()}</span>
             </p>
             <p class="line">""</p>
-            // The intro is `about.txt`, not a second copy of it. One place to
-            // edit, and it flows rather than carrying hard wraps that would
-            // wrap again on a narrow screen.
+            // `about.txt` itself, not a copy: one place to edit it. It flows
+            // rather than carrying hard wraps that would wrap again on a
+            // narrow screen.
             <p class="line">{fs::intro()}</p>
             <p class="line">""</p>
             <p class="line dim">
@@ -120,7 +117,7 @@ pub fn App() -> impl IntoView {
     view! {
         <Seo/>
 
-        // The VGA console font is self-hosted from /public/fonts (see main.css).
+        // The console font, served from /public/fonts. See main.css.
         <Link
             rel="preload"
             href="/fonts/vga.woff2"

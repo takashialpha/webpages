@@ -1,8 +1,7 @@
-// Large static view trees produce deeply nested generic future types; the async
-// SSR-resolve / hydrate paths exceed the default query depth of 128 in release.
+// A big static view tree becomes a deeply nested generic future, and resolving
+// or hydrating one goes past the default depth of 128.
 #![recursion_limit = "256"]
-// Stricter than the workspace, which only denies it: nothing in the site
-// needs unsafe, so nothing may reintroduce it.
+// Nothing in the site needs unsafe, so nothing may bring it back.
 #![forbid(unsafe_code)]
 
 pub mod app;
@@ -20,23 +19,22 @@ pub mod viewport;
 pub mod wall;
 pub mod wasi;
 
-/// Canonical origin of the deployed site. Used to build absolute URLs for the
-/// canonical link, Open Graph tags, and the sitemap.
+/// Where the site lives. The one place the domain is written: the canonical
+/// link, the Open Graph tags, the sitemap and the prompt all come from here.
 pub const SITE_URL: &str = "https://takashialpha.com";
 
-/// The commit this binary was built from. CI exports `GITHUB_SHA`; a local
-/// build has no commit to name and says so.
+/// The commit this was built from. CI sets `GITHUB_SHA`; a local build has no
+/// commit to name and says so.
 pub const BUILD: &str = match option_env!("GITHUB_SHA") {
     Some(sha) => sha,
     None => "dev",
 };
 
-/// The user a visitor is logged in as. The prompt and `whoami` both read this,
-/// so they cannot disagree about who you are.
+/// Who a visitor is logged in as. The prompt and `whoami` both read this, so
+/// they cannot disagree.
 pub const USER: &str = "guest";
 
-/// [`SITE_URL`] without its scheme, for the shell prompt. Derived rather than
-/// written out a second time.
+/// [`SITE_URL`] without its scheme, for the prompt.
 #[must_use]
 pub fn site_host() -> &'static str {
     SITE_URL.trim_start_matches("https://")
@@ -44,10 +42,10 @@ pub fn site_host() -> &'static str {
 
 /// The `uname -srm` line for the machine actually serving the site.
 ///
-/// The server reads its own kernel from `/proc` and renders the result into
-/// `<html data-uname>` as well as into the banner text. That attribute is how
-/// the client gets the same string: hydration has to reproduce the banner
-/// exactly, and a browser has no other way to know what the server runs.
+/// The server reads its kernel from `/proc` and puts the answer in the banner
+/// and in `<html data-uname>`. The attribute is how the browser gets the same
+/// string: hydration has to rebuild the banner exactly, and there is no other
+/// way for it to know what the server runs.
 #[cfg(not(feature = "hydrate"))]
 #[must_use]
 pub fn uname() -> String {
@@ -75,7 +73,7 @@ pub fn uname() -> String {
         .unwrap_or_else(|| "Linux takashialpha unknown".to_owned())
 }
 
-/// `BUILD` shortened to the usual seven characters, when it is a full SHA.
+/// [`BUILD`] cut to the usual seven characters, when it is a full sha.
 #[must_use]
 pub fn short_build() -> &'static str {
     BUILD.get(..7).unwrap_or(BUILD)

@@ -1,8 +1,8 @@
 //! The content tree the shell walks.
 //!
-//! Content lives in `content/` and is baked in at compile time, so a new
-//! section is a file plus a line in [`ROOT`]. `ls`, `cat`, `cd` and completion
-//! all read this tree, so they cannot disagree.
+//! Everything is in `content/` and baked in at compile time, so a new section
+//! is a file and a line in [`ROOT`]. `ls`, `cat`, `cd` and completion all read
+//! this tree, so they cannot disagree.
 
 /// A named entry in a directory.
 pub struct Entry {
@@ -10,17 +10,15 @@ pub struct Entry {
     pub node: Node,
 }
 
-/// A file whose contents are not in the binary, because they change while you
-/// are looking at them. Reading one is a request, so a command that meets it
-/// has to answer later.
+/// A file the binary does not carry, because it changes while you are looking
+/// at it. Reading one is a request, so whatever reads it answers later.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Live {
     /// The shared board. See `wall.rs`.
     Wall,
 }
 
-/// A directory of further entries, a file's text, a file the server holds, or
-/// something that can be run.
+/// A directory, a file's text, a file the server holds, or something runnable.
 pub enum Node {
     Dir(&'static [Entry]),
     File(&'static str),
@@ -29,7 +27,7 @@ pub enum Node {
 }
 
 impl Node {
-    /// Looks up a single name in this node. Files have no children.
+    /// One name in this node. Files have no children.
     #[must_use]
     pub fn child(&self, name: &str) -> Option<&'static Self> {
         match *self {
@@ -51,8 +49,8 @@ impl Node {
     }
 }
 
-/// The opening paragraph of `about.txt`, reused verbatim by the login banner and
-/// the meta description. Splitting it out here means the intro is written once.
+/// The first paragraph of `about.txt`, used word for word by the banner and by
+/// the meta description, so the intro is written once.
 #[must_use]
 pub fn intro() -> &'static str {
     const ABOUT: &str = include_str!("../content/documents/about.txt");
@@ -124,8 +122,8 @@ pub const ROOT: Node = Node::Dir(&[
             },
         ]),
     },
-    // The only file anyone else can write to, and the only one held by the
-    // server rather than this binary.
+    // The only file anyone else can write to, and the only one the server
+    // holds rather than this binary.
     Entry {
         name: "var",
         node: Node::Dir(&[Entry {
@@ -135,11 +133,11 @@ pub const ROOT: Node = Node::Dir(&[
     },
 ]);
 
-/// Resolves a path against a working directory. Handles `.`, `..` and `~`,
-/// and refuses to walk above the top.
+/// A path against a working directory. Handles `.`, `..` and `~`, and will not
+/// walk above the top.
 ///
-/// A leading `/` never resolves: this tree is a home directory, and there is
-/// no root above it.
+/// A leading `/` never resolves: this tree is a home directory and there is no
+/// root above it.
 ///
 /// Returns segments, which [`node_at`] turns back into a node.
 #[must_use]
@@ -161,8 +159,8 @@ pub fn resolve(cwd: &[&'static str], path: &str) -> Option<Vec<&'static str>> {
                 segments.pop();
             }
             name => {
-                // Only names that exist in the tree can enter the path, which is
-                // what keeps the returned segments `'static`.
+                // Only names that are really there can enter the path, which
+                // is what keeps the segments `'static`.
                 let here = node_at(&segments)?;
                 let entry = here.entries().iter().find(|entry| entry.name == name)?;
                 segments.push(entry.name);
@@ -172,7 +170,7 @@ pub fn resolve(cwd: &[&'static str], path: &str) -> Option<Vec<&'static str>> {
     Some(segments)
 }
 
-/// Walks resolved segments back to the node they name.
+/// Segments back to the node they name.
 #[must_use]
 pub fn node_at(segments: &[&str]) -> Option<&'static Node> {
     let mut node = &ROOT;
@@ -182,7 +180,7 @@ pub fn node_at(segments: &[&str]) -> Option<&'static Node> {
     Some(node)
 }
 
-/// Renders a path the way the prompt and `pwd` show it, rooted at `~`.
+/// A path the way the prompt and `pwd` show it, rooted at `~`.
 #[must_use]
 pub fn display_path(segments: &[&str]) -> String {
     if segments.is_empty() {

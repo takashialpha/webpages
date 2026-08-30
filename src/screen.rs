@@ -1,11 +1,11 @@
 //! The alternate screen: a grid a program draws into.
 //!
 //! A terminal keeps two buffers. The scrollback is the normal one and is left
-//! alone; this is the other, thrown away when the program exits. It is why
-//! leaving `vim` does not eat your shell history.
+//! alone; this is the other, thrown away when the program exits.
 //!
-//! Colours are indices into the sixteen a console has. The stylesheet resolves
-//! them, so a program follows `theme` without knowing themes exist.
+//! Colours are indices into the sixteen a console has. The stylesheet turns
+//! them into actual colours, so a program follows `theme` without knowing
+//! themes exist.
 
 /// The sixteen colours a terminal has.
 pub const COLORS: usize = 16;
@@ -36,8 +36,8 @@ impl Default for Cell {
     }
 }
 
-/// A run of characters sharing one pair of colours. Rows are drawn as runs,
-/// not cells, so a mostly empty row costs almost nothing.
+/// Characters sharing a pair of colours. Rows are drawn as runs, not cells, so
+/// a mostly empty row costs almost nothing.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Run {
     pub text: String,
@@ -92,8 +92,8 @@ impl Screen {
         self.cells.fill(Cell::BLANK);
     }
 
-    /// Writes one cell. Off the grid is ignored, not an error: a box drawn a
-    /// little too wide should lose the overhang, not stop.
+    /// Writes one cell. Off the grid is ignored rather than an error: a box
+    /// drawn slightly too wide should lose the overhang, not stop.
     pub fn put(&mut self, x: usize, y: usize, ch: char, fg: u8, bg: u8) {
         if x >= self.cols || y >= self.rows {
             return;
@@ -105,7 +105,7 @@ impl Screen {
         };
     }
 
-    /// Cuts one row into runs of matching colour.
+    /// One row, cut into runs of matching colour.
     #[must_use]
     pub fn runs(&self, y: usize) -> Vec<Run> {
         if y >= self.rows {

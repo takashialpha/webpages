@@ -1,9 +1,9 @@
 //! Conway's life, as a guest program.
 //!
-//! Two cells to a character, stacked, using the half blocks the VGA ROM font
-//! carries. A character cell is twice as tall as it is wide, so splitting it
-//! in half is both twice the resolution and square cells, which is what the
-//! patterns are supposed to look like.
+//! Two cells to a character, stacked, using the half blocks the ROM font
+//! carries. A character is twice as tall as it is wide, so splitting it in half
+//! is both twice the resolution and square cells, which is what the patterns
+//! are meant to look like.
 
 #![deny(unsafe_code)]
 
@@ -12,10 +12,8 @@ use std::cell::RefCell;
 mod tty {
     //! The screen and the keyboard, which WASI has no concept of.
     //!
-    //! Everything unsafe in this program is here: declaring an import and
-    //! calling it are both unsafe, and there is no way to reach the host
-    //! without doing so. Wrapping them once means the rest is ordinary safe
-    //! Rust rather than unsafe scattered through the drawing code.
+    //! All the unsafe is here. Declaring an import and calling it are both
+    //! unsafe, and wrapping them once keeps the rest of the program safe.
     #![expect(
         unsafe_code,
         reason = "a wasm import can only be declared and called unsafely"
@@ -41,21 +39,21 @@ mod tty {
     }
 
     pub fn width() -> usize {
-        // SAFETY: the host provides this import, and a module asking for one it
-        // does not provide fails to instantiate rather than linking to nothing.
+        // SAFETY: the host provides this. A module asking for an import it does
+        // not provide fails to instantiate rather than linking to nothing.
         count(unsafe { cols() })
     }
 
     pub fn height() -> usize {
-        // SAFETY: the host provides this import, and a module asking for one it
-        // does not provide fails to instantiate rather than linking to nothing.
+        // SAFETY: the host provides this. A module asking for an import it does
+        // not provide fails to instantiate rather than linking to nothing.
         count(unsafe { rows() })
     }
 
     /// Draws one cell. Out of range is the host's problem, and it ignores it.
     pub fn draw(x: usize, y: usize, ch: char, fg: u8, bg: u8) {
-        // SAFETY: the host provides this import, and a module asking for one it
-        // does not provide fails to instantiate rather than linking to nothing.
+        // SAFETY: the host provides this. A module asking for an import it does
+        // not provide fails to instantiate rather than linking to nothing.
         unsafe {
             put(at(x), at(y), u32::from(ch), u32::from(fg), u32::from(bg));
         }
@@ -63,8 +61,8 @@ mod tty {
 
     /// The next key as a byte, or `None` when nothing is waiting.
     pub fn pressed() -> Option<u8> {
-        // SAFETY: the host provides this import, and a module asking for one it
-        // does not provide fails to instantiate rather than linking to nothing.
+        // SAFETY: the host provides this. A module asking for an import it does
+        // not provide fails to instantiate rather than linking to nothing.
         match unsafe { key() } {
             -1 => None,
             byte => u8::try_from(byte).ok(),
@@ -73,13 +71,13 @@ mod tty {
 }
 
 /// Percent of cells alive in a fresh world.
-const DENSITY: u64 = 28;
+const DENSITY: u8 = 28;
 
 /// Most generations one frame will catch up on.
 const CATCHUP: usize = 4;
 
-/// Milliseconds a generation lasts, slowest to fastest. `[` and `]` walk this
-/// rather than scaling a number, so every speed is one worth watching.
+/// Milliseconds a generation lasts, slowest to fastest. `[` and `]` walk the
+/// list rather than scaling a number, so every speed is one worth watching.
 const SPEEDS: [f32; 7] = [480.0, 240.0, 120.0, 60.0, 30.0, 16.0, 8.0];
 const NORMAL: usize = 2;
 
@@ -96,7 +94,6 @@ struct Life {
     paused: bool,
     speed: usize,
     generation: u64,
-    seed: u64,
 }
 
 impl Life {
@@ -109,28 +106,12 @@ impl Life {
             paused: false,
             speed: NORMAL,
             generation: 0,
-            // Mixed with the clock on the first frame, so a second run does
-            // not repeat the first.
-            seed: 0x2545_f491_4f6c_dd1d,
         }
-    }
-
-    /// xorshift, because a pattern only has to look unplanned, and pulling in
-    /// a generator for that would be silly.
-    const fn random(&mut self) -> u64 {
-        self.seed ^= self.seed << 13;
-        self.seed ^= self.seed >> 7;
-        self.seed ^= self.seed << 17;
-        self.seed
     }
 
     fn scatter(&mut self) {
         let count = self.cols * self.rows;
-        let mut cells = Vec::with_capacity(count);
-        for _ in 0..count {
-            cells.push(self.random() % 100 < DENSITY);
-        }
-        self.cells = cells;
+        self.cells = (0..count).map(|_| fastrand::u8(..100) < DENSITY).collect();
         self.generation = 0;
     }
 
@@ -146,8 +127,8 @@ impl Life {
     }
 
     /// Neighbours, on a grid that wraps: a glider runs off one edge and back
-    /// in the other, which is better to watch than one that dies at a wall.
-    /// Offsets are added rather than subtracted so the arithmetic stays
+    /// in the other, which is better to watch than one dying at a wall. The
+    /// offsets are added rather than subtracted to keep the arithmetic
     /// unsigned.
     fn neighbours(&self, x: usize, y: usize) -> u8 {
         let mut count = 0;
@@ -181,9 +162,9 @@ impl Life {
     }
 
     fn draw(&self) {
-        // Two rows of the world to a row of characters: the upper half block
-        // is the even row and the lower half the odd one, so a full cell,
-        // either half, or nothing covers every combination.
+        // Two world rows to a character row: the upper half block is the even
+        // row and the lower half the odd one, so a full block, either half, or
+        // nothing covers every case.
         for cy in 0..self.rows / 2 {
             for x in 0..self.cols {
                 let top = self.cells[(cy * 2) * self.cols + x];
@@ -200,15 +181,14 @@ impl Life {
         self.status();
     }
 
-    /// A status bar, the way a full screen program has one: what this is and
-    /// what it is doing on the left, what the keys do on the right, and
-    /// reverse video across the whole width.
+    /// A status bar, the way a full screen program has one: what this is on
+    /// the left, what the keys do on the right, reverse video across.
     fn status(&self) {
         let row = tty::height().saturating_sub(1);
         let width = tty::width();
 
-        // Both halves close with a separator, so the space between them reads
-        // as a gap in one bar rather than as two loose ends.
+        // Both halves close with a separator, so the space between reads as a
+        // gap in one bar rather than two loose ends.
         let left: Vec<char> = format!(
             " life │ gen {} │ {}×{} │ {} │",
             compact(self.generation),
@@ -223,15 +203,15 @@ impl Life {
         .chars()
         .collect();
 
-        // Named by what the key does, and by what it would do next: space
-        // toggles, so it offers the other one.
+        // Named by what the key would do next: space toggles, so it offers
+        // whichever it is not.
         let toggle = if self.paused {
             "space: resume"
         } else {
             "space: pause"
         };
-        // Least useful first, because that is the order they are dropped in
-        // when the screen is too narrow to hold them all.
+        // Least useful first, which is the order they are dropped in when the
+        // screen is too narrow for all of them.
         let mut hints = vec!["r: seed", "[ ]: speed", toggle, "q: quit"];
 
         let right = loop {
@@ -241,8 +221,7 @@ impl Life {
             }
             hints.remove(0);
         };
-        // Even one hint may not fit a very narrow screen, and half a word is
-        // worse than none.
+        // Even one may not fit, and half a word is worse than none.
         let start = width.saturating_sub(right.len());
         let room = left.len() <= start;
 
@@ -278,9 +257,9 @@ impl Life {
             return;
         }
         self.due += elapsed;
-        // Bounded rather than "until caught up": a backgrounded tab stops
-        // getting frames, and coming back to it should not mean simulating
-        // every generation that happened while nobody was looking.
+        // Bounded, not "until caught up": a backgrounded tab stops getting
+        // frames, and coming back should not run every generation that happened
+        // while nobody was looking.
         let tick = SPEEDS[self.speed];
         for _ in 0..CATCHUP {
             if self.due < tick {
@@ -293,8 +272,8 @@ impl Life {
     }
 }
 
-/// `1234` stays itself, `12345` becomes `12.3k`. A counter left running
-/// overnight should not push the rest of the bar off the screen.
+/// `1234` stays itself, `12345` becomes `12.3k`. Left running overnight, a
+/// counter should not push the rest of the bar off the screen.
 fn compact(n: u64) -> String {
     const K: u64 = 1_000;
     const M: u64 = 1_000_000;
@@ -309,16 +288,15 @@ fn compact(n: u64) -> String {
 
 thread_local! {
     /// The world, which outlives any one frame. A thread local rather than a
-    /// `static mut`: wasm is single threaded, and this needs no unsafe.
+    /// `static mut`: wasm has one thread, and this needs no unsafe.
     static WORLD: RefCell<Life> = const { RefCell::new(Life::new()) };
 }
 
-/// Called once per animation frame by the terminal, which owns the loop.
-/// Returns non-zero to quit.
+/// Called once a frame by the terminal, which owns the loop. Non-zero quits.
 ///
 /// The name has to survive mangling for the host to find it, and saying so is
-/// itself unsafe: nothing else in this program exports a symbol, so there is
-/// nothing for it to collide with.
+/// itself unsafe. Nothing else here exports a symbol, so there is nothing for
+/// it to collide with.
 #[expect(unsafe_code, reason = "the host looks this up by name")]
 #[unsafe(no_mangle)]
 pub extern "C" fn frame(elapsed: f32) -> i32 {
@@ -326,8 +304,8 @@ pub extern "C" fn frame(elapsed: f32) -> i32 {
         if world.keys() {
             return 1;
         }
-        // A resize changes the world, so it starts again rather than
-        // pretending the old one still fits.
+        // A resize changes the world, so it starts again rather than pretend
+        // the old one still fits.
         if !world.fits() {
             world.fit();
         }
@@ -337,21 +315,9 @@ pub extern "C" fn frame(elapsed: f32) -> i32 {
     })
 }
 
-/// The low bits of a wide number, without a cast that could lose more than it
-/// means to.
-fn fold(wide: u128) -> u64 {
-    u64::try_from(wide & u128::from(u64::MAX)).unwrap_or(1)
-}
-
-/// Run before the first frame, and where the seed comes from.
+/// Run before the first frame, so the world is already there when it arrives.
 fn main() {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        // Only the low bits matter: this is a seed, not a time, so the wide
-        // value is folded down rather than cast.
-        .map_or(1, |since| fold(since.as_nanos()));
     WORLD.with_borrow_mut(|world| {
-        world.seed ^= now | 1;
         world.fit();
         world.draw();
     });

@@ -23,15 +23,14 @@ fi
 
 tar -C "$TMP" -xzf "$TMP/$ASSET"
 
-# Leptos resolves the content-hashed bundle names through hash.txt, and looks
-# for it beside the binary. Without it every render panics and the site serves
-# nothing at all.
+# Leptos resolves the hashed bundle names through hash.txt and looks for it
+# beside the binary. Without it every render panics and nothing is served.
 for f in webpages hash.txt site; do
     [ -e "$TMP/$f" ] || { echo "archive is missing $f" >&2; exit 1; }
 done
 
-# The programs under bin/ are built separately from the site, so an archive
-# built without that step is complete except for them.
+# The programs are built separately from the site, so an archive built without
+# that step is complete except for them.
 shopt -s nullglob
 guests=("$TMP"/site/bin/*.wasm)
 [ ${#guests[@]} -gt 0 ] || { echo "archive has no programs in site/bin" >&2; exit 1; }
@@ -48,7 +47,7 @@ HAD_CURRENT=0
 mv "$ROOT/next" "$ROOT/current"
 
 # A 200 on `/` does not mean the deploy is good. Follow what the page and the
-# release actually reference, and confirm each one resolves.
+# release actually point at, and check each one resolves.
 healthy() {
     local html urls url guest
     html=$(curl -fsS --retry 10 --retry-delay 1 --retry-connrefused "$ORIGIN/") || return 1
@@ -61,7 +60,7 @@ healthy() {
     done
 
     # Programs are fetched when they are run, so nothing on the page points at
-    # them and a missing one would only show up when somebody typed its name.
+    # them and a missing one would only show up when somebody ran it.
     for guest in "$ROOT"/current/site/bin/*.wasm; do
         curl -fsS -o /dev/null "$ORIGIN/bin/$(basename "$guest")" \
             || { echo "program does not resolve: $(basename "$guest")" >&2; return 1; }
@@ -85,8 +84,8 @@ else
     exit 1
 fi
 
-# The board is written on every change, so a service that cannot write it loses
-# everything drawn since the last restart. The server says so at startup.
+# A service that cannot write the board loses everything drawn since the last
+# restart. The server says so at startup, so look for it having said so.
 if journalctl -u webpages --since "-1 min" 2>/dev/null | grep -q 'cannot write the graffiti board'; then
     echo "warning: the service cannot write its board; see WALL_PATH in the unit" >&2
 fi

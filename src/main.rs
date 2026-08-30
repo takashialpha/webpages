@@ -1,23 +1,23 @@
-// See lib.rs: deeply nested view-tree future types overflow the default depth in release.
+// See lib.rs: nested view-tree future types overflow the default depth.
 #![recursion_limit = "256"]
-// Stricter than the workspace, which only denies it: nothing in the server
-// needs unsafe, so nothing may reintroduce it.
+// Nothing in the server needs unsafe, so nothing may bring it back.
 #![forbid(unsafe_code)]
 
-/// Installs the process-wide `tracing` subscriber, formatted for the journal
-/// that captures our stdout: color only when stdout is a terminal, and no
-/// timestamp when journald owns stdout, since it sets `JOURNAL_STREAM` and
-/// stamps every entry itself.
+/// Sets up logging, shaped for wherever stdout goes: colour only for a
+/// terminal, and no timestamp under journald, which stamps every line itself
+/// and sets `JOURNAL_STREAM` to say so.
 ///
-/// Fails only if a subscriber is already installed.
+/// # Errors
+///
+/// Only if a subscriber is already installed.
 #[cfg(feature = "ssr")]
 fn init_tracing() -> Result<(), tracing_subscriber::util::TryInitError> {
     use std::io::IsTerminal as _;
     use tracing_subscriber::util::SubscriberInitExt as _;
     use tracing_subscriber::{EnvFilter, fmt};
 
-    // Without `RUST_LOG`: our own lifecycle lines, and warnings and errors from
-    // everything else. Request logging sits a level below, at `webpages=debug`.
+    // Without `RUST_LOG`: our startup and shutdown lines, and warnings from
+    // everything else. Per-request lines sit below that, at `webpages=debug`.
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn,webpages=info"));
     let subscriber = fmt::Subscriber::builder()
@@ -31,16 +31,13 @@ fn init_tracing() -> Result<(), tracing_subscriber::util::TryInitError> {
     }
 }
 
-/// Routes panics through the log rather than raw stderr, so one arrives in the
-/// journal at `ERROR` with the same shape as every other line.
+/// Sends panics to the log instead of raw stderr, so one lands in the journal
+/// at `ERROR` looking like every other line, with a backtrace when
+/// `RUST_BACKTRACE` asks for one.
 ///
-/// The panicking request still loses its connection, which a reverse proxy in
-/// front turns into a 502. Catching the unwind to answer with a 500 instead
-/// would need a dependency, and would cover only panics that happen before the
-/// response starts streaming, whereas this covers every one.
-///
-/// A backtrace rides along when `RUST_BACKTRACE` asks for one, matching what
-/// the default hook would have printed.
+/// The request still loses its connection and a proxy in front turns that into
+/// a 502. Answering 500 instead would mean catching the unwind, which only
+/// works before the response starts streaming; this covers every panic.
 #[cfg(feature = "ssr")]
 fn init_panic_logging() {
     use std::backtrace::{Backtrace, BacktraceStatus};
@@ -55,17 +52,17 @@ fn init_panic_logging() {
     }));
 }
 
-/// Logs one line per request: method, path, status, and how long it took.
+/// One line per request: method, path, status, and how long it took.
 ///
-/// One line is the whole point. A span-based tracing layer splits the same
-/// facts across a start event, a finish event, and an end-of-stream event,
-/// which triples the volume of an access log for nothing.
+/// One line is the point. A span-based layer spreads the same facts across a
+/// start, a finish and an end-of-stream event, which is three times the access
+/// log for nothing.
 #[cfg(feature = "ssr")]
 async fn log_request(
     request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
-    // Both are cheap handle clones, not copies of the underlying bytes.
+    // Handle clones, not copies of the bytes.
     let method = request.method().clone();
     let uri = request.uri().clone();
 
@@ -82,8 +79,8 @@ async fn log_request(
     response
 }
 
-/// The board is small, changes constantly, and is read by a command rather than
-/// a browser cache, so it must never be stored anywhere along the way.
+/// The board changes constantly and is read by a command, not a cache, so
+/// nothing along the way may hold on to it.
 #[cfg(feature = "ssr")]
 const WALL_HEADERS: [(axum::http::HeaderName, &str); 2] = [
     (
@@ -95,10 +92,10 @@ const WALL_HEADERS: [(axum::http::HeaderName, &str); 2] = [
 
 /// Who is writing, for the rate limit.
 ///
-/// Cloudflare sets `CF-Connecting-IP` and strips any copy the client sent, so
-/// behind the proxy this is trustworthy. It is only trustworthy there: anything
-/// reaching the origin directly could name whoever it liked, which is why the
-/// origin is not meant to be reachable directly.
+/// Cloudflare sets `CF-Connecting-IP` and strips whatever the client sent, so
+/// this is trustworthy behind the proxy and nowhere else. Anything reaching the
+/// origin directly could claim any address it liked, which is why the origin is
+/// not meant to be reachable directly.
 #[cfg(feature = "ssr")]
 fn writer(headers: &axum::http::HeaderMap) -> &str {
     headers
@@ -131,22 +128,28 @@ async fn write_cell(
             .into_response();
     };
 
-    if !wall.allowed(writer(headers), 1) {
+    if !wall.allowed(writer(headers)) {
         return (
             StatusCode::TOO_MANY_REQUESTS,
             WALL_HEADERS,
-            format!("slow down: {} cells a minute\n", webpages::wall::BUDGET),
+            // Which of the two limits was hit is not worth working out to say:
+            // either way the answer is to write less.
+            format!(
+                "slow down: {} cells a minute each, {} across everyone\n",
+                webpages::wall::BUDGET,
+                webpages::wall::CEILING,
+            ),
         )
             .into_response();
     }
 
-    // Written outside the lock, and only when something actually changed, so
-    // setting a cell to what it already held costs no disk at all.
+    // Outside the lock, and only when something changed, so setting a cell to
+    // what it already held costs no disk at all.
     if let Some(text) = wall.set(x, y, byte) {
         match tokio::fs::write(wall.path(), &text).await {
             Ok(()) => wall.saved(),
-            // The write still stands in memory, so the board is right until a
-            // restart. Saying so is more useful than failing the request.
+            // It still stands in memory, so the board is right until a
+            // restart. Saying so beats failing the request.
             Err(error) => {
                 tracing::error!(path = %wall.path().display(), %error, "could not persist the board");
             }
@@ -156,12 +159,15 @@ async fn write_cell(
     (WALL_HEADERS, wall.render()).into_response()
 }
 
-/// Installs the termination handlers up front, so a failure to do so is a
-/// startup error rather than a shutdown that never arrives. The returned future
-/// resolves on the first signal.
+/// Installs the termination handlers up front, so failing to is a startup
+/// error rather than a shutdown that never comes. The future resolves on the
+/// first signal.
 ///
-/// systemd sends SIGTERM on stop and restart; SIGINT is Ctrl-C in a foreground
-/// run.
+/// systemd sends SIGTERM on stop and restart; SIGINT is Ctrl-C.
+///
+/// # Errors
+///
+/// Whatever stopped the handlers being installed.
 #[cfg(feature = "ssr")]
 fn shutdown_signal() -> std::io::Result<impl Future<Output = ()>> {
     use tokio::signal::unix::{SignalKind, signal};
@@ -192,20 +198,19 @@ async fn main() -> std::process::ExitCode {
     use tracing::{error, info, warn};
     use webpages::app::shell;
 
-    // First, so every failure below has somewhere to go. An error here means a
-    // subscriber is already installed, which is itself reportable.
+    // First, so every failure below has somewhere to go.
     if let Err(error) = init_tracing() {
         warn!(%error, "keeping the tracing subscriber already installed");
     }
     init_panic_logging();
 
-    // Pins the process start before anything can ask for the uptime.
+    // Pins the start before anything can ask for the uptime.
     let _ = webpages::clock::uptime_secs();
 
-    // Leptos renders through a global spawner. `leptos_axum` installs one from
-    // inside its router helpers; serving a single route by hand skips that, and
-    // every render panics on the first spawn. An error means one is already set,
-    // which is equally fine.
+    // Leptos renders through a global spawner, which `leptos_axum` only
+    // installs from its own router helpers. Serving one route by hand skips
+    // that, and every render panics on its first spawn. An error means one is
+    // already set, which is just as good.
     let _ = any_spawner::Executor::init_tokio();
 
     let conf = match get_configuration(None) {
@@ -218,8 +223,8 @@ async fn main() -> std::process::ExitCode {
     let leptos_options = conf.leptos_options;
     let addr = leptos_options.site_addr;
 
-    // The quiet bad deploy: the binary comes up fine, but `LEPTOS_SITE_ROOT`
-    // points nowhere and every page renders without CSS or WASM.
+    // The quiet bad deploy: it starts fine, but `LEPTOS_SITE_ROOT` points
+    // nowhere and every page renders without CSS or wasm.
     if !std::path::Path::new(&*leptos_options.site_root).is_dir() {
         warn!(
             site_root = %leptos_options.site_root,
@@ -227,16 +232,14 @@ async fn main() -> std::process::ExitCode {
         );
     }
 
-    // The other one, and the one that actually bit in production. Leptos
-    // resolves the content-hashed bundle names through this file and looks for
-    // it beside the binary, not under the site root. Leave it behind and every
-    // render panics on the unguarded read in leptos, so the connection drops
-    // and a proxy in front answers 502. Nothing is served at all.
+    // The other one, and the one that actually bit. Leptos resolves the
+    // hashed bundle names through this file and looks for it beside the
+    // binary, not under the site root. Leave it behind and every render panics
+    // on an unguarded read, the connection drops, and a proxy answers 502.
     //
-    // Logged rather than fatal because the file is read lazily, on the first
-    // render: the process would come up either way, and refusing to start here
-    // would only move the same failure earlier. Saying so at startup is what
-    // turns a bare 502 into something with a cause attached.
+    // Logged rather than fatal: the file is read lazily on the first render, so
+    // refusing to start would only move the same failure earlier. Saying it
+    // here is what puts a cause next to the 502.
     if leptos_options.hash_files {
         let beside_binary = std::env::current_exe()
             .ok()
@@ -244,8 +247,8 @@ async fn main() -> std::process::ExitCode {
 
         match beside_binary {
             Some(path) if path.is_file() => {}
-            // Naming the path it looked at is the whole point: the failure is
-            // otherwise indistinguishable from the file simply being elsewhere.
+            // Naming the path is the point: otherwise this looks the same as
+            // the file simply being somewhere else.
             Some(path) => error!(
                 path = %path.display(),
                 "hash file not found, every render will panic and serve nothing; \
@@ -263,27 +266,25 @@ async fn main() -> std::process::ExitCode {
         }
     };
 
-    // The site is a single page, so the sitemap is one fixed URL. Built from
-    // `SITE_URL` rather than spelled out again, and leaked because it is read on
-    // every hit and never changes.
+    // One page, so one URL. Built from `SITE_URL` rather than written out
+    // again, and leaked because it never changes.
     let sitemap: &'static str = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{}</loc></url></urlset>"#,
         webpages::SITE_URL
     )
     .leak();
 
-    // The board outlives any one release, so it cannot live in the release
-    // directory: `deploy-webpages` swaps that out and would take the board with
-    // it. `WALL_PATH` points at somewhere durable, and systemd's
-    // `StateDirectory` is the natural place.
+    // The board outlives any one release, so it cannot sit in the release
+    // directory: a deploy swaps that out and would take the board with it.
+    // `WALL_PATH` points somewhere that survives, which for the real deploy is
+    // a directory in a home the service can reach. See the unit.
     let wall = std::sync::Arc::new(webpages::wall::State::load(
         std::env::var_os("WALL_PATH")
             .map_or_else(|| std::path::PathBuf::from("wall.txt"), Into::into),
     ));
 
     // The board is written on every change, so a path that cannot be written
-    // loses everything anyone draws. Better to say so at startup than at the
-    // first write.
+    // loses everything anyone draws. Say so now rather than at the first write.
     if let Err(error) = wall.persist() {
         error!(
             path = %wall.path().display(),
@@ -300,8 +301,8 @@ async fn main() -> std::process::ExitCode {
         }
     };
     info!(
-        // The socket's own address, which differs from the configured one
-        // whenever that asks for port 0 or an unspecified host.
+        // The socket's own address, which is not the configured one when that
+        // asked for port 0 or an unspecified host.
         address = %listener.local_addr().unwrap_or(addr),
         build = webpages::BUILD,
         site_root = %leptos_options.site_root,
@@ -360,8 +361,8 @@ async fn main() -> std::process::ExitCode {
                 move || shell(leptos_options.clone())
             })),
         )
-        // Serves everything under the site root, and answers anything else with
-        // a 404. The pages the old site had are simply gone, so they land here.
+        // Everything under the site root, and a 404 for anything else. The
+        // pages the old site had are gone, so they land here.
         .fallback(leptos_axum::file_and_error_handler(shell))
         .layer(from_fn(log_request))
         .with_state(leptos_options);
@@ -378,5 +379,6 @@ async fn main() -> std::process::ExitCode {
     ExitCode::SUCCESS
 }
 
+/// The wasm build has no server to be. This exists so the crate has a `main`.
 #[cfg(not(feature = "ssr"))]
 pub const fn main() {}

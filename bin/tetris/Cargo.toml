@@ -1,9 +1,9 @@
 [package]
-name = "stars"
+name = "tetris"
 version = "0.0.0"
-description = "A drifting starfield, as a wasm guest."
-keywords = ["wasm", "wasi", "terminal"]
-categories = ["command-line-utilities"]
+description = "Tetris, as a wasm guest."
+keywords = ["wasm", "wasi", "terminal", "game"]
+categories = ["games"]
 edition.workspace = true
 readme.workspace = true
 license.workspace = true

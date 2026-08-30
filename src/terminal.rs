@@ -11,8 +11,8 @@ use crate::shell::{self, Line, Output, Session, Sink, Span};
 /// One executed command and whatever it printed.
 #[derive(Clone)]
 struct Entry {
-    /// The prompt's tail at the time, so old lines keep their directory.
-    /// [`prompt_view`] rebuilds the fixed part around it.
+    /// The prompt's tail at the time, so an old line keeps its directory.
+    /// [`prompt_view`] rebuilds the rest around it.
     tail: String,
     input: String,
     /// A signal, because a command may answer later.
@@ -22,9 +22,9 @@ struct Entry {
 /// The prompt, built the same way everywhere it appears.
 ///
 /// Split into elements so no text node looks like an email address, which
-/// Cloudflare rewrites. Both prompts must split identically: each inline box
-/// rounds on its own, so the same text in one box and in four lands a
-/// sixteenth of a pixel apart and the line shifts when you press Enter.
+/// Cloudflare rewrites. Both prompts have to split the same way: each inline
+/// box rounds on its own, so the same text in one box and in four lands a
+/// sixteenth of a pixel apart, and the line shifts when you press Enter.
 fn prompt_view(tail: impl IntoView + 'static) -> impl IntoView {
     view! {
         <span class="prompt">
@@ -53,16 +53,15 @@ const fn selecting() -> bool {
     false
 }
 
-/// The frame loop, stored so it can schedule itself. Shared because it must
-/// outlive the call that set it up and be reachable from the frame it asks
-/// for.
+/// The frame loop, kept so it can schedule itself. Shared because it outlives
+/// the call that set it up and has to be reachable from the frame it asked for.
 type Tick = std::rc::Rc<dyn Fn(f64)>;
 
 /// How many whole cells fit into a span of pixels.
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    reason = "clamped to 1..=4096 on the line above"
+    reason = "clamped into 1..=4096 before the cast"
 )]
 fn fits(span: f64, cell: f64) -> usize {
     if cell <= 0.0 {
@@ -71,8 +70,8 @@ fn fits(span: f64, cell: f64) -> usize {
     (span / cell).floor().clamp(1.0, 4096.0) as usize
 }
 
-/// What `exit` prints before the session goes inert. The personal line lives in
-/// `content/logout.txt` so it can be reworded without touching code.
+/// What `exit` prints before the session goes quiet. The personal line is in
+/// `content/logout.txt`, so rewording it is not a code change.
 fn farewell() -> Output {
     const GOODBYE: &str = include_str!("../content/logout.txt");
 
@@ -86,8 +85,8 @@ fn farewell() -> Output {
     ])
 }
 
-/// Paints one line of output. Link spans become real anchors, which is the one
-/// thing on this page you click rather than type.
+/// One line of output. Link spans become real anchors, the one thing here you
+/// click rather than type.
 fn render_line(line: &Line) -> AnyView {
     line.iter()
         .map(|span| {
@@ -131,8 +130,8 @@ fn render_output(output: &Output) -> AnyView {
             </div>
         }
         .into_any(),
-        // Pending never reaches here: the entry holds `Nothing` until its task
-        // answers, and what the task writes is one of the arms above.
+        // Pending never gets here: the entry holds `Nothing` until its task
+        // answers, and the task writes one of the arms above.
         Output::Pending(_) | Output::Run(_) | Output::Clear | Output::Exit | Output::Nothing => {
             ().into_any()
         }
@@ -151,29 +150,28 @@ pub fn Terminal(children: Children) -> impl IntoView {
     let banner = RwSignal::new(true);
     // Set by `exit`. The prompt goes away and nothing else is read.
     let closed = RwSignal::new(false);
-    // Where the caret sits, in cells. The font is fixed width, so the column is
-    // the offset: no measuring, and it stays right after an arrow key.
+    // Where the caret is, in cells. Fixed width font, so the column is just
+    // the offset: nothing to measure, and it stays right after an arrow key.
     let column = RwSignal::new(0_usize);
-    // The first column shown, when a line outgrows the field. In whole
-    // columns: the input scrolls by pixels and stops mid-character, which a
-    // terminal never does. Its text is not drawn, so only this matters.
+    // The first column shown, once a line outgrows the field. Whole columns:
+    // an input scrolls by pixels and stops mid-character, which a terminal
+    // never does. Its own text is not drawn, so only this matters.
     let scrolled = RwSignal::new(0_usize);
 
     let input_ref = NodeRef::<html::Input>::new();
-    let bottom_ref = NodeRef::<html::Div>::new();
+    let screen_ref = NodeRef::<html::Div>::new();
     let tty_ref = NodeRef::<html::Main>::new();
 
-    // The running program and its screen. Local storage: neither is `Send`,
-    // and both live on the one thread a browser has.
+    // The running program and its screen. Local, because neither is `Send` and
+    // a browser has one thread anyway.
     let running = StoredValue::new_local(None::<Box<dyn Program>>);
     let screen = StoredValue::new_local(Screen::new(0, 0));
-    // One signal per row, so a frame only rewrites the rows that changed
-    // rather than the whole grid.
+    // One signal per row, so a frame rewrites only the rows that changed.
     let rows = RwSignal::new(Vec::<RwSignal<Vec<Run>>>::new());
     let alt = RwSignal::new(false);
 
-    // Only the path moves. The rest of the prompt is fixed markup, so this is
-    // all that is ever rebuilt, and all an echoed line has to remember.
+    // Only the path moves, so this is all that is ever rebuilt and all an
+    // echoed line has to remember.
     let prompt_tail = move || format!(":{}$", session.get().prompt_path());
 
     let focus_input = move || {
@@ -182,8 +180,8 @@ pub fn Terminal(children: Children) -> impl IntoView {
         }
     };
 
-    // Read the caret back after anything that could move it. Only writes on
-    // a change: a held key syncs every repeat.
+    // Read the caret back after anything that could have moved it. Writes only
+    // on a change, since a held key comes through on every repeat.
     let sync_column = move || {
         if let Some(element) = input_ref.get()
             && let Ok(Some(at)) = element.selection_start()
@@ -192,8 +190,8 @@ pub fn Terminal(children: Children) -> impl IntoView {
             if column.get_untracked() != at {
                 column.set(at);
             }
-            // Scroll only when the caret would otherwise leave the field, and
-            // then by whole columns.
+            // Only when the caret would leave the field, and then by whole
+            // columns.
             let cell = crate::viewport::cell_size().0;
             let visible = fits(f64::from(element.client_width()), cell);
             let mut offset = scrolled.get_untracked();
@@ -208,33 +206,40 @@ pub fn Terminal(children: Children) -> impl IntoView {
         }
     };
 
-    // Focus as soon as the terminal mounts, so a visitor can type immediately
-    // instead of having to click first. On touch this only arms the input; the
-    // keyboard still needs a tap, which no browser will skip.
+    // Focus on mount, so you can type without clicking first. On touch this
+    // only arms the input: the keyboard still needs a tap, which no browser
+    // will skip.
     Effect::new(move |_| focus_input());
 
-    // `autocorrect` is a Safari extension with no typed setter in Leptos, and
-    // without it iOS rewrites commands into prose as you type them.
+    // A Safari attribute with no typed setter in leptos. Without it, ios
+    // rewrites commands into prose as you type.
     Effect::new(move |_| {
         if let Some(element) = input_ref.get() {
             let _ = element.set_attribute("autocorrect", "off");
         }
     });
 
-    // Next frame, not this one: what was just printed has to be laid out
-    // before the browser can be told where the bottom is. Chrome hides this by
-    // scrolling the focused input into view itself; Firefox does not.
+    // Next frame, not this one: what was just printed has to be laid out before
+    // the browser can be told where the bottom is.
+    //
+    // The scroller's own `scrollTop`, rather than scrolling an element into
+    // view: that walks every scrollable ancestor on the way up, and ios will
+    // scroll the document itself even with `overflow: hidden` on the body,
+    // which is exactly what drags the fixed terminal out of place.
     let scroll_to_prompt = move || {
         request_animation_frame(move || {
-            if let Some(bottom) = bottom_ref.get_untracked() {
-                bottom.scroll_into_view();
+            if let Some(screen) = screen_ref.get_untracked() {
+                screen.set_scroll_top(screen.scroll_height());
             }
         });
     };
 
-    // Keep the prompt in view as output accumulates.
+    // Keep the prompt in view as output accumulates, and again when a program
+    // hands the screen back: the scrollback is `overflow: hidden` while it sits
+    // out of sight, which pins it to the top and loses where it was.
     Effect::new(move |_| {
         scrollback.track();
+        alt.track();
         scroll_to_prompt();
     });
 
@@ -243,10 +248,10 @@ pub fn Terminal(children: Children) -> impl IntoView {
     // what gives the terminal its height, so this runs on mount either way.
     Effect::new(move |_| crate::viewport::track(scroll_to_prompt));
 
-    // The only way an entry reaches the scrollback. A settled output goes
-    // straight in; a pending one leaves the entry blank and starts the task
-    // that fills it, which has to happen after the entry is in place so a task
-    // resolving immediately still has somewhere to write.
+    // The only way into the scrollback. A settled output goes straight in; a
+    // pending one leaves the entry blank and starts the task that fills it,
+    // after the entry is in place so a task that answers at once has somewhere
+    // to write.
     let record = move |tail: String, input: String, output: Output| {
         let (initial, task) = match output {
             Output::Pending(task) => (Output::Nothing, Some(task)),
@@ -263,9 +268,8 @@ pub fn Terminal(children: Children) -> impl IntoView {
         });
 
         if let Some(task) = task {
-            // A late answer changes this one cell and not the scrollback, so
-            // the effect watching the scrollback has no reason to fire. This
-            // gives it one.
+            // A late answer touches this cell and not the scrollback, so the
+            // effect watching the scrollback would not fire. This one does.
             Effect::new(move |_| {
                 cell.track();
                 scroll_to_prompt();
@@ -274,20 +278,18 @@ pub fn Terminal(children: Children) -> impl IntoView {
         }
     };
 
-    // How many cells fit, measured from the terminal itself rather than
-    // assumed: the cell is fixed width, so one probe gives both dimensions.
+    // How many cells fit, measured rather than assumed.
     let measure = move || {
-        // The terminal itself, not the scrollback inside it: the scrollback is
-        // hidden while a program is running, and a hidden element measures
-        // zero. The alternate screen fills this box exactly.
+        // The terminal, not the scrollback inside it: that is out of sight
+        // while a program runs. The alternate screen fills this box exactly.
         let Some(host) = tty_ref.get_untracked() else {
             return (80, 24);
         };
         let width = f64::from(host.client_width());
         let height = f64::from(host.client_height());
-        // The font is 8 by 16 at its base size and the stylesheet doubles it,
-        // so a cell is always half as wide as it is tall. Reading the computed
-        // size back is what keeps this true at either breakpoint.
+        // The font is 8 by 16 and the stylesheet only ever doubles it, so a
+        // cell is half as wide as it is tall. Measuring is what keeps that true
+        // at either breakpoint.
         let cell = crate::viewport::cell_size();
         if cell.0 <= 0.0 || cell.1 <= 0.0 {
             return (80, 24);
@@ -295,7 +297,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
         (fits(width, cell.0), fits(height, cell.1))
     };
 
-    /// Repaints only the rows whose contents actually changed.
+    /// Repaints only the rows that changed.
     #[expect(
         clippy::items_after_statements,
         reason = "it belongs beside the loop that calls it"
@@ -316,8 +318,8 @@ pub fn Terminal(children: Children) -> impl IntoView {
         focus_input();
     };
 
-    // The frame loop. It owns the clock, calls the program once per frame, and
-    // stops the moment the program says it is done or is torn down under it.
+    // Owns the clock, calls the program once a frame, and stops the moment it
+    // says it is done or is taken away underneath it.
     let tick: StoredValue<Option<Tick>, LocalStorage> = StoredValue::new_local(None);
     let step = move |last: f64| {
         let Some(run) = tick.get_value() else { return };
@@ -361,7 +363,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
         }
     })));
 
-    // Hands the screen to a program that is ready to draw.
+    // Hands the screen to a program ready to draw.
     let mount = move |mut program: Box<dyn Program>| {
         let (cols, want_rows) = measure();
         screen.update_value(|screen| {
@@ -372,7 +374,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
         screen.update_value(|screen| program.start(screen));
         running.set_value(Some(program));
         alt.set(true);
-        // The input is the keyboard whether or not it can be seen, so it keeps
+        // The input is the keyboard whether it can be seen or not, so it keeps
         // focus while the program has the screen.
         focus_input();
         screen.with_value(|screen| rows.with_untracked(|rows| repaint(screen, rows)));
@@ -380,8 +382,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
     };
 
     // Fetched when it is run, so none of it is in the bundle until then. The
-    // entry sits in the scrollback meanwhile, and carries the reason if it
-    // never arrives.
+    // entry waits in the scrollback, and says why if it never arrives.
     let launch = move |listing: &'static program::Listing, sink: Sink| {
         leptos::task::spawn_local(async move {
             match program::open_guest(listing.url).await {
@@ -390,8 +391,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
                     sink.set(Output::Nothing);
                     mount(program);
                 }
-                // It printed and exited, so the entry keeps what it said and
-                // the prompt comes straight back.
+                // It printed and exited, so the entry keeps what it said.
                 Ok(program::Opened::Printed(output)) => sink.set(output),
                 Err(problem) => sink.set(shell::error(problem)),
             }
@@ -419,8 +419,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
             }
             Output::Run(listing) => {
                 // Deferred, because a guest has to be fetched before it can
-                // draw, and a native one resolves the same way for one path
-                // rather than two.
+                // draw. One path rather than two.
                 record(
                     echoed,
                     typed,
@@ -450,8 +449,8 @@ pub fn Terminal(children: Children) -> impl IntoView {
         input.set(completion.line);
     };
 
-    // Up walks back through history, down walks forward and off the end into a
-    // fresh empty line, which is what a shell does.
+    // Up walks back, down walks forward and off the end into a fresh empty
+    // line, which is what a shell does.
     let recall = move |backwards: bool| {
         let entries = history.get();
         if entries.is_empty() {
@@ -476,8 +475,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
         );
     };
 
-    // Where the caret is right now, read from the input rather than from the
-    // `column` signal, which only catches up on the next frame.
+    // Read from the input, not from `column`, which only catches up next frame.
     let caret = move || {
         input_ref
             .get_untracked()
@@ -485,8 +483,8 @@ pub fn Terminal(children: Children) -> impl IntoView {
             .map_or_else(|| input.get_untracked().len(), |at| at as usize)
     };
 
-    // Next frame: changing the line rewrites `prop:value`, which puts the
-    // caret at the end. Placing it first would just be overwritten.
+    // Next frame: changing the line rewrites `prop:value` and puts the caret
+    // at the end, so placing it first would be overwritten.
     let put_caret = move |at: usize| {
         request_animation_frame(move || {
             if let Some(element) = input_ref.get_untracked() {
@@ -497,22 +495,20 @@ pub fn Terminal(children: Children) -> impl IntoView {
         });
     };
 
-    /// The readline bindings a shell answers to. `ctrl-w` and `ctrl-n` are
-    /// missing on purpose: browsers reserve them for closing the tab and
-    /// opening a window, and will not let the page have them, so binding them
-    /// would delete a word and close the tab.
+    /// The letter of a plain one-character key, so `ctrl-a` is told from
+    /// `ctrl-ArrowLeft`.
     #[expect(
         clippy::items_after_statements,
-        reason = "the table belongs beside the handler that reads it"
+        reason = "it belongs beside the handler that calls it"
     )]
     fn shortcut(key: &str) -> Option<char> {
-        key.chars().next().filter(|_| key.len() == 1)
+        let mut letters = key.chars();
+        letters.next().filter(|_| letters.next().is_none())
     }
 
     let on_keydown = move |event: KeyboardEvent| {
-        // A running program owns the keyboard. Ctrl-C is the exception, the
-        // way it is in any terminal: it is how you get out of something that
-        // has stopped listening.
+        // A running program owns the keyboard, except for ctrl-c, the way it
+        // is anywhere: it is how you leave something that stopped listening.
         if alt.get_untracked() {
             event.prevent_default();
             let key = event.key();
@@ -528,12 +524,16 @@ pub fn Terminal(children: Children) -> impl IntoView {
             return;
         }
 
+        // The readline bindings a shell answers to. `ctrl-w` and `ctrl-n` are
+        // missing on purpose: browsers keep them for closing the tab and
+        // opening a window and will not hand them over, so binding them would
+        // delete a word and close the tab.
         if event.ctrl_key()
             && let Some(letter) = shortcut(&event.key().to_lowercase())
         {
             let handled = match letter {
-                // Copying wins when there is something selected, the way a
-                // terminal emulator hands ctrl-c back for a selection.
+                // A selection means copy, the way any terminal emulator hands
+                // ctrl-c back for one.
                 'c' if !selecting() => {
                     record(
                         prompt_tail(),
@@ -545,14 +545,14 @@ pub fn Terminal(children: Children) -> impl IntoView {
                     put_caret(0);
                     true
                 }
-                // Clears around whatever is half typed, which stays.
+                // Clears around whatever is half typed, which stays put.
                 'l' => {
                     scrollback.set(Vec::new());
                     banner.set(false);
                     true
                 }
-                // End of input closes the session, but only on an empty line;
-                // otherwise it would throw away what you were writing.
+                // End of input closes the session, but only on an empty line,
+                // or it would throw away what you were writing.
                 'd' if input.get_untracked().is_empty() => {
                     input.set("exit".to_owned());
                     submit();
@@ -608,22 +608,22 @@ pub fn Terminal(children: Children) -> impl IntoView {
             _ => {}
         }
 
-        // Moving the caret is this event's default action, which the browser
-        // performs after the handler returns, so the column it lands on can
-        // only be read on the next frame. Holding a key repeats keydown and
-        // sends no keyup until release, which is why reading it on keyup alone
-        // left the drawn cursor behind for as long as the key was down.
+        // Moving the caret is this event's default action, which happens after
+        // the handler returns, so where it lands can only be read next frame.
+        // Not on keyup: a held key repeats keydown and sends no keyup until
+        // release, which left the drawn cursor behind for as long as it was
+        // down.
         request_animation_frame(sync_column);
     };
 
     view! {
-        // Anywhere that is not a link or the prompt itself gives the keyboard
-        // straight back, so the shell never silently stops listening. There is
-        // no mouse on a tty, so there is nothing else for a click to do.
+        // Anywhere but a link or the prompt hands the keyboard back, so the
+        // shell never quietly stops listening. There is no mouse on a tty, so a
+        // click has nothing else to do.
         //
-        // Preventing the default on pointerdown stops the focus moving and the
+        // Preventing the default on pointerdown stops focus moving and stops a
         // selection starting, but a click still fires, so links keep working
-        // without needing to opt out of this.
+        // without opting out.
         <main
             node_ref=tty_ref
             class="tty"
@@ -662,7 +662,12 @@ pub fn Terminal(children: Children) -> impl IntoView {
                 </div>
             </Show>
 
-            <div class="screen" class:stashed=move || alt.get() aria-live="polite">
+            <div
+                node_ref=screen_ref
+                class="screen"
+                class:stashed=move || alt.get()
+                aria-live="polite"
+            >
                 <div class:gone=move || !banner.get()>{children()}</div>
                 {move || {
                     scrollback
@@ -673,9 +678,9 @@ pub fn Terminal(children: Children) -> impl IntoView {
                                 <p class="line">
                                     {prompt_view(entry.tail.clone())}
                                     " "
-                                    // The same colour it was while it was
-                                    // being typed: what you wrote should not
-                                    // change appearance the moment you run it.
+                                    // The colour it was while you were typing
+                                    // it: running a line should not change how
+                                    // it looks.
                                     <span class="typed">{entry.input.clone()}</span>
                                 </p>
                                 {
@@ -687,19 +692,18 @@ pub fn Terminal(children: Children) -> impl IntoView {
                         .collect_view()
                 }}
 
-                // A real input, sitting inline in the prompt line, rather than a
-                // hidden one mirrored into a span. Mirroring would draw the
-                // caret at the end of the text even after Left arrow, which
-                // misreports where typing will land.
+                // A real input, inline in the prompt line, rather than a
+                // hidden one mirrored into a span. Mirroring draws the caret at
+                // the end of the text even after Left, which lies about where
+                // typing will land.
                 <Show when=move || !closed.get()>
                     <p class="line current">
-                        // Split so that no single text node holds anything
-                        // shaped like an email address. Cloudflare rewrites
-                        // any that does into a link it decodes on load, which
-                        // left this prompt as two nodes where the server sent
-                        // one. Hydration bound to the first, and every `cd`
-                        // wrote the new prompt there while the stale tail sat
-                        // beside it: `guest@host:~/projects$:~$`.
+                        // Split so no one text node is shaped like an email
+                        // address. Cloudflare rewrites any that is into a link
+                        // it decodes on load, which left this prompt as two
+                        // nodes where the server sent one. Hydration bound to
+                        // the first, and every `cd` wrote there while the stale
+                        // tail sat beside it: `guest@host:~/projects$:~$`.
                         {prompt_view(prompt_tail)}
                         <span class="field">
                             <input
@@ -709,14 +713,13 @@ pub fn Terminal(children: Children) -> impl IntoView {
                                 autocapitalize="off"
                                 autocomplete="off"
                                 spellcheck="false"
-                                // Labels the phone's return key "go" rather
-                                // than "return", since it runs the command.
+                                // Labels the phone's return key "go", since
+                                // that is what it does.
                                 enterkeyhint="go"
                                 aria-label="terminal input"
                                 prop:value=move || input.get()
-                                // The prompt is the one place a click should
-                                // behave normally, so you can put the caret
-                                // where you want it.
+                                // The one place a click behaves normally, so
+                                // you can put the caret where you want it.
                                 on:pointerdown=|event| event.stop_propagation()
                                 on:input:target=move |event| {
                                     recalled.set(None);
@@ -728,33 +731,29 @@ pub fn Terminal(children: Children) -> impl IntoView {
                                 on:keydown=on_keydown
                             />
                             // The typed text, drawn over the input rather than
-                            // by it. An input renders its text in its own way,
-                            // which is not quite how a span renders the same
-                            // characters, so a line changed appearance the
-                            // moment it was echoed into the scrollback as one.
-                            // Both are spans now, and cannot differ.
+                            // by it. An input lays its text out slightly
+                            // differently from a span, so a line used to change
+                            // appearance the moment it was echoed into the
+                            // scrollback as one. Both are spans now.
                             //
-                            // Painted after the input, so the selection the
-                            // input draws shows behind these glyphs rather
-                            // than instead of them. It scrolls with the input
-                            // too: a line longer than the field scrolls rather
-                            // than wrapping.
+                            // After the input, so the selection the input draws
+                            // shows behind these glyphs rather than instead of
+                            // them.
                             <span
                                 class="typed"
                                 aria-hidden="true"
-                                // Offset with `left`, not a transform: a
-                                // transform puts the text on its own layer,
-                                // and a layer rasterises glyphs on a different
-                                // pixel grid from the plain span this becomes
-                                // when the line is echoed.
+                                // `left`, not a transform: a transform puts
+                                // the text on its own layer, and a layer
+                                // rasterises glyphs on a different pixel grid
+                                // from the plain span this becomes when echoed.
                                 style:left=move || {
                                     format!("calc({} * var(--cell) * -1)", scrolled.get())
                                 }
                             >
                                 {move || input.get()}
                             </span>
-                            // The block cursor, drawn at the real caret column.
-                            // The native caret is hidden in CSS.
+                            // The block cursor, at the real caret column. The
+                            // native one is hidden in CSS.
                             <span
                                 class="cursor"
                                 aria-hidden="true"
@@ -770,11 +769,10 @@ pub fn Terminal(children: Children) -> impl IntoView {
                         </span>
                     </p>
                 </Show>
-                <div node_ref=bottom_ref></div>
             </div>
 
-            // Pointerdown with the default prevented, so focus never leaves the
-            // input and the on-screen keyboard stays up.
+            // Pointerdown with the default prevented, so focus never leaves
+            // the input and the keyboard stays up.
             <Show when=move || !closed.get() && !alt.get()>
                 <div class="keys">
                     <button

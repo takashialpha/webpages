@@ -1,10 +1,8 @@
-# The site is two builds. The guests are separate crates for a different
-# target, so cargo cannot do both at once, and cargo-leptos has no hook to run
-# one before the other.
+# The site is two builds. The guests are separate crates for a different target,
+# so cargo cannot do both at once and cargo-leptos has no hook to run one first.
 #
-# This is a command runner, not a build system: cargo already knows what is
-# stale, and a second layer of timestamps on top of it would only be another
-# thing that can be wrong. Every recipe here asks cargo, every time.
+# A command runner, not a build system: cargo already knows what is stale, and a
+# second layer of timestamps would only be another thing that can be wrong.
 
 # list what there is to run
 default:
@@ -18,7 +16,7 @@ build: guests
 guests:
     #!/bin/sh
     set -eu
-    # The programs are whatever is in bin/, the same list the workspace globs.
+    # Whatever is in bin/, the same list the workspace globs.
     names=$(ls bin)
     cargo build --profile guest --target wasm32-wasip1 \
         $(for name in $names; do printf -- '-p %s ' "$name"; done)
@@ -31,9 +29,9 @@ guests:
 # build the guests and serve the site
 serve: guests
     #!/bin/sh
-    # Ctrl-C is how a server is stopped, not a failure. It reaches every
-    # process in the foreground group at once, so the recipe catches it and
-    # ends quietly rather than letting the shell report a signalled child.
+    # Ctrl-C is how a server is stopped, not a failure. It reaches the whole
+    # foreground group, so catch it and end quietly rather than let the shell
+    # report a signalled child.
     trap 'exit 0' INT TERM
     cargo leptos serve --release
 

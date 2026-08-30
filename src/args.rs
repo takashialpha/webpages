@@ -1,15 +1,13 @@
 //! Option parsing, shared by every command.
 //!
-//! Each command declares what it takes in a [`Spec`], and [`parse`] enforces
-//! it before the command runs. No command parses its own line, so none can
-//! quietly ignore what it was given.
-//!
-//! `help` and completion read the same spec, so usage text is generated from
-//! what actually runs.
+//! A command declares what it takes in a [`Spec`] and [`parse`] enforces it
+//! first, so no command parses its own line and none can quietly ignore what it
+//! was given. `help` and completion read the same spec, so the usage text comes
+//! from what actually runs.
 
 use crate::shell::{Line, Output, Span, error_line};
 
-/// What is needed to check a line and explain it.
+/// What it takes to check a line and explain it.
 ///
 /// Commands and programs are different things typed the same way, so they are
 /// refused and explained the same way.
@@ -20,17 +18,17 @@ pub struct About<'a> {
     pub spec: &'a Spec,
 }
 
-/// One option a command accepts. Options are boolean; nothing here takes a
-/// value, so there is no `--name=value` form to parse.
+/// One option. They are all on or off: nothing takes a value, so there is no
+/// `--name=value` to parse.
 pub struct Flag {
     pub short: char,
-    /// `None` for an option with no long form, the way `ls -1` has none.
+    /// `None` when there is no long form, the way `ls -1` has none.
     pub long: Option<&'static str>,
     /// One line, shown by `help <command>`.
     pub help: &'static str,
 }
 
-/// What Tab offers after a command. `cd` takes only directories; `pwd` takes
+/// What Tab offers after a command: `cd` takes only directories, `pwd` takes
 /// nothing.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Completes {
@@ -62,18 +60,7 @@ impl Spec {
         completes: Completes::Nothing,
     };
 
-    /// A command that takes no options and one optional path.
-    pub const fn one(operand: &'static str) -> Self {
-        Self {
-            flags: &[],
-            min: 0,
-            max: Some(1),
-            operand,
-            completes: Completes::Paths,
-        }
-    }
-
-    /// The same, for a command that can only be given a directory.
+    /// A command that takes no options and one optional directory.
     pub const fn dir(operand: &'static str) -> Self {
         Self {
             flags: &[],
@@ -85,16 +72,16 @@ impl Spec {
     }
 }
 
-/// A parsed command line: which options were given, and the operands left over.
+/// A checked command line: the options given, and the operands left over.
 pub struct Args<'a> {
-    /// The short form of every option seen, whichever form was typed.
+    /// Every option seen, by its short form, whichever form was typed.
     shorts: Vec<char>,
     operands: Vec<&'a str>,
 }
 
 impl<'a> Args<'a> {
-    /// Whether an option was given, named by its short form even when the long
-    /// form was the one typed.
+    /// Whether an option was given, asked for by its short form even when the
+    /// long one was typed.
     pub fn has(&self, short: char) -> bool {
         self.shorts.contains(&short)
     }
@@ -103,7 +90,7 @@ impl<'a> Args<'a> {
         &self.operands
     }
 
-    /// The first operand, for the commands that take at most one.
+    /// The first operand, for commands that take at most one.
     pub fn first(&self) -> Option<&'a str> {
         self.operands.first().copied()
     }
@@ -172,8 +159,8 @@ pub fn usage_line(about: About<'_>) -> String {
         format!(" [-{shorts}]")
     };
 
-    // Square brackets for optional, angle for required, an ellipsis for any
-    // number, which is how a man page spells the same thing.
+    // Square brackets optional, angle required, an ellipsis for any number,
+    // the way a man page spells it.
     let operands = match (spec.min, spec.max) {
         (_, Some(0)) => String::new(),
         (0, Some(_)) => format!(" [{}]", spec.operand),
@@ -211,7 +198,7 @@ pub fn usage(about: About<'_>) -> Output {
     Output::Lines(lines)
 }
 
-/// `-a, --all`, or just `-1` for an option with no long form.
+/// `-a, --all`, or just `-1` when there is no long form.
 pub fn flag_names(flag: &Flag) -> String {
     flag.long.map_or_else(
         || format!("-{}", flag.short),
@@ -219,7 +206,7 @@ pub fn flag_names(flag: &Flag) -> String {
     )
 }
 
-/// An error naming the command, with the way out under it.
+/// An error naming the command, with the way out underneath.
 fn fail(about: About<'_>, message: &str) -> Output {
     Output::Lines(vec![
         error_line(format!("{}: {message}", about.name)),

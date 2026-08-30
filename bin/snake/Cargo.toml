@@ -9,5 +9,8 @@ readme.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[dependencies]
+fastrand.workspace = true
+
 [lints]
 workspace = true

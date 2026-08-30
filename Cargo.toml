@@ -1,25 +1,26 @@
 [workspace]
-# The site, and the guest programs it serves. They are separate crates because
-# they are separate programs, built for a different target.
-# A glob, so adding a program is creating its directory and nothing else.
+# The site, and the programs it serves. A glob, so adding a program is making
+# its directory and nothing else.
 members = [".", "bin/*"]
-# Only the site is built by an ordinary `cargo build` or `cargo clippy`. A
-# guest is a `wasm32-wasip1` binary and does not link for the host, so building
-# one has to be asked for: `make guests`, or `cargo build -p life --target
-# wasm32-wasip1 --profile guest`.
+# A guest is a `wasm32-wasip1` binary and will not link for the host, so a
+# plain `cargo build` must not try. Ask for one with `just guests`.
 default-members = ["."]
+
+# Every guest wants an unplanned pattern, not cryptography. Named once here so
+# the version is in one place.
+[workspace.dependencies]
+fastrand = "2"
 
 [workspace.package]
 edition = "2024"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/takashialpha/webpages"
-# Resolved against the workspace root, so every member points at the one
-# README rather than carrying a copy of it.
+# Resolved against the workspace root, so every member points at the one README.
 readme = "README.md"
 
 [package]
 name = "webpages"
-version = "0.0.0"                                                  # should not be versioned. tags/releases are not published; latest is always in main.
+version = "0.0.0" # not versioned: there are no tags, and latest is whatever is in main
 description = "My personal site, a tty in the browser, served live at takashialpha.com."
 keywords = ["website", "leptos", "axum", "terminal"]
 categories = ["web-programming"]
@@ -28,8 +29,8 @@ readme.workspace = true
 license.workspace = true
 repository.workspace = true
 
-# The conventions every crate here is held to. `unsafe_code` is only denied by
-# them; this crate forbids it outright at its roots, which is stricter.
+# Shared with the guests. They only deny `unsafe_code`; this crate forbids it
+# at its roots, which is stricter and cannot be undone.
 [lints]
 workspace = true
 
@@ -37,23 +38,31 @@ workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-leptos = { version = "0" }
-# Leptos spawns onto a global executor that `leptos_axum` only installs from
-# its own router helpers, which this binary does not use. Already in the tree
-# via leptos, so declaring it adds no crates.
+# Leptos renders through a global executor that only `leptos_axum`'s router
+# helpers install, and this binary serves its one route by hand. Already in the
+# tree via leptos, so naming it adds no crates.
 any_spawner = { version = "0", features = ["tokio"], optional = true }
 axum = { version = "0", features = ["http2"], optional = true }
 console_error_panic_hook = { version = "0", optional = true }
-# `js_sys::WebAssembly` is how a guest program is instantiated: the browser's
-# own engine runs it, so no interpreter ships in the bundle. Already in the tree
-# via wasm-bindgen, so declaring it adds no crates.
+# The board's rate limit. Hand-written windows and eviction are how you get a
+# limiter that is subtly wrong. Default features add a faster clock, a
+# concurrent map and a jitter source; `std` alone is plenty for one board.
+governor = { version = "0", default-features = false, features = [
+  "std",
+], optional = true }
+# `js_sys::WebAssembly` is how a guest is instantiated: the browser's own engine
+# runs it, so no interpreter ships in the bundle. Already in the tree.
 js-sys = { version = "0", optional = true }
+leptos = { version = "0" }
 leptos_axum = { version = "0", optional = true }
 leptos_meta = { version = "0" }
-# Each feature backs something the server binary uses directly: `fs` for
-# persisting the graffiti board, `macros` for `#[tokio::main]` and `select!`,
-# `net` for `TcpListener`, `signal` for graceful shutdown. Spelled out rather than left to feature unification from axum, whose
-# own feature set is not ours to depend on.
+# Where a URL stops in a line of prose is fiddlier than it looks. Same answer on
+# the server and in the browser, which hydration needs.
+linkify = { version = "0" }
+# What the server binary uses directly: `fs` writes the board, `macros` is
+# `#[tokio::main]` and `select!`, `net` is `TcpListener`, `signal` is the
+# shutdown. Spelled out rather than inherited from axum's feature set, which is
+# not ours to depend on.
 tokio = { version = "1", features = [
   "fs",
   "macros",
@@ -61,6 +70,13 @@ tokio = { version = "1", features = [
   "rt-multi-thread",
   "signal",
 ], optional = true }
+# `date` wants one format and no time zones: the calendar and the formatter,
+# no parsing and no tzdb.
+time = { version = "0", default-features = false, features = [
+  "formatting",
+  "macros",
+  "std",
+] }
 tracing = { version = "0", optional = true }
 # `ansi` implies `fmt`, which implies `registry` and `std`.
 tracing-subscriber = { version = "0", default-features = false, features = [
@@ -68,17 +84,17 @@ tracing-subscriber = { version = "0", default-features = false, features = [
   "env-filter",
 ], optional = true }
 wasm-bindgen = { version = "0", optional = true }
-# Awaits the browser's `fetch` for the `wall` command. Leptos re-exports this,
-# but only behind a `#[doc(hidden)]` path that is not its public surface, so it
-# is declared here instead. Already in the tree via leptos, so no new crates.
+# Awaits `fetch` for the `wall` command. Leptos re-exports it, but only behind a
+# `#[doc(hidden)]` path, so it is named here. Already in the tree.
 wasm-bindgen-futures = { version = "0", optional = true }
-# Only the web-sys features leptos does not already switch on. `Performance`
-# measures how long the page has been open, see clock.rs; `VisualViewport`
-# measures the part of the screen a phone keyboard leaves visible, see
-# viewport.rs; `Selection` is how ctrl-c tells a copy from an interrupt.
-# Everything else reached for here, fetch and styles included, leptos already
-# enables, and asking again would only be a second place to keep in step.
+# Only what leptos does not already switch on. `FontFaceSet` says when the
+# console font has landed and the cell can be measured, `Performance` is how
+# long the page has been open, `Selection` tells a ctrl-c copy from an
+# interrupt, `VisualViewport` is the screen a phone keyboard leaves. See
+# viewport.rs and clock.rs. Everything else, fetch and styles included, leptos
+# enables already, and asking twice is a second place to keep in step.
 web-sys = { version = "0", features = [
+  "FontFaceSet",
   "Performance",
   "Selection",
   "VisualViewport",
@@ -96,6 +112,7 @@ hydrate = [
 ssr = [
   "dep:any_spawner",
   "dep:axum",
+  "dep:governor",
   "dep:tokio",
   "dep:leptos_axum",
   "dep:tracing",
@@ -104,13 +121,13 @@ ssr = [
   "leptos_meta/ssr",
 ]
 
-# A tree this size emits enough DWARF to overflow the 4 GiB range of 32-bit debug
-# relocations, which fails the link. Line tables still give file and line in
-# backtraces, at a fraction of the size.
+# A tree this size emits enough DWARF to overflow the 4 GiB range of 32-bit
+# debug relocations, which fails the link. Line tables still name the file and
+# line in a backtrace, at a fraction of the size.
 [profile.dev]
 debug = "line-tables-only"
 
-# Defines a size-optimized profile for the WASM bundle in release mode
+# The bundle is fetched before the page can do anything, so it is built small.
 [profile.wasm-release]
 inherits = "release"
 opt-level = 'z'
@@ -118,67 +135,31 @@ lto = true
 codegen-units = 1
 panic = "abort"
 
+# Where cargo-leptos puts what it builds, and what it builds it from. It erases
+# `site-root` on every build, so nothing may be kept there.
 [package.metadata.leptos]
-# The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
-# output-name = "webpages"
-
-# The site root folder is where cargo-leptos generate all output. WARNING: all content of this folder will be erased on a rebuild. Use it in your server setup.
 site-root = "target/site"
-
-# The site-root relative folder where all compiled output (JS, WASM and CSS) is written
-# Defaults to pkg
 site-pkg-dir = "pkg"
-
-# [Optional] The source CSS file. If it ends with .sass or .scss then it will be compiled by dart-sass into CSS. The CSS is optimized by Lightning CSS before being written to <site-root>/<site-pkg>/webpages.css
 style-file = "style/main.css"
-# Assets source dir. All files found here will be copied and synchronized to site-root.
-# The assets-dir cannot have a sub directory with the same name/path as site-pkg-dir.
-#
-# Optional. Env: LEPTOS_ASSETS_DIR.
 assets-dir = "public"
-
-# Content-hash the bundle filenames, so a changed bundle gets a new URL and can
-# be cached forever. Writes the hashes to `hash.txt` next to the server binary.
-hash-files = true
-
-# The IP and port (ex: [::1]:3000) where the server serves the content. Use it in your server setup.
 site-addr = "[::1]:3000"
-
-# The port to use for automatic reload monitoring
 reload-port = 3001
-
-#  The browserlist query used for optimizing the CSS.
 browserquery = "defaults"
 
-# The features to use when compiling the bin target
-#
-# Optional. Can be over-ridden with the command line parameter --bin-features
+# Content-hash the bundle filenames, so a changed bundle gets a new URL and can
+# be cached forever. Writes the hashes to `hash.txt` beside the server binary.
+hash-files = true
+
+# The site is two builds out of one crate: a server binary and a wasm bundle.
 bin-features = ["ssr"]
-
-# If the --no-default-features flag should be used when compiling the bin target
-#
-# Optional. Defaults to false.
 bin-default-features = false
-
-# The features to use when compiling the lib target
-#
-# Optional. Can be over-ridden with the command line parameter --lib-features
 lib-features = ["hydrate"]
-
-# If the --no-default-features flag should be used when compiling the lib target
-#
-# Optional. Defaults to false.
 lib-default-features = false
-
-# The profile to use for the lib target when compiling for release
-#
-# Optional. Defaults to "release".
 lib-profile-release = "wasm-release"
 
-
-# Guests are fetched over the wire when they are run, so they are built small.
-# A profile only exists in the workspace root, which is why it is here rather
-# than beside each of them.
+# Guests are fetched when they are run, so they are built small too. A profile
+# only exists in the workspace root, which is why it is here rather than beside
+# each of them.
 [profile.guest]
 inherits = "release"
 opt-level = "z"
@@ -190,10 +171,9 @@ strip = true
 [workspace.lints.rust]
 warnings = "deny"
 
-# Denied rather than forbidden, because it cannot be forbidden everywhere: a
-# guest program has to declare and call its wasm imports, and both are unsafe.
-# The site adds `#![forbid(unsafe_code)]` at its crate roots, which is stricter
-# and cannot be undone; a guest confines unsafe to one module and says why.
+# Denied, not forbidden, because a guest has to declare and call its wasm
+# imports and both are unsafe. Each guest keeps that in one module and says
+# why; the site forbids it outright at its crate roots.
 unsafe_code = "deny"
 
 # Security
@@ -220,22 +200,20 @@ pedantic = { level = "deny", priority = -1 }
 nursery = { level = "deny", priority = -1 }
 cargo = { level = "deny", priority = -1 }
 
-# Not actionable in this repo: flags duplicate transitive dependency versions
-# pulled in via our dependency tree.
+# Duplicate versions deep in someone else's tree, which we cannot do anything
+# about.
 multiple_crate_versions = "allow"
 
-# Leptos's `#[component]` macro expands each page/component fn into a trait
-# impl with a same-named method, and `view! {}` trees are naturally long
-# JSX-like markup, neither reflects an actual code smell here. The macro
-# also doesn't propagate a `#[must_use]` placed on the source fn through to
-# the generated impl, so that attribute is a silent no-op on components too.
+# All three are about leptos's `#[component]` macro. It expands a component
+# into a trait impl with a same-named method; `view! {}` trees are long the way
+# markup is long; and a `#[must_use]` on the source function does not reach the
+# generated impl, so asking for one would be a no-op.
 same_name_method = "allow"
 too_many_lines = "allow"
 must_use_candidate = "allow"
 
-# Selected `clippy::restriction` lints (not enabled as a group: many of its
-# lints actively conflict with each other or with pedantic/nursery choices
-# above).
+# Picked out of `clippy::restriction` one at a time. Not the whole group: many
+# of its lints contradict each other, or the choices above.
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"

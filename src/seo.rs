@@ -1,8 +1,8 @@
 //! Head metadata for the one page this site has.
 //!
-//! The structured data is built here rather than sitting in a JSON file so that
+//! The structured data is built here rather than kept in a JSON file so that
 //! [`SITE_URL`] is the only place the domain is written. The old site spelled it
-//! out twelve times across four schema files, which silently went stale.
+//! out twelve times across four schema files and they quietly went stale.
 
 use leptos::prelude::*;
 use leptos_meta::{Link, Meta, Title};
@@ -15,12 +15,16 @@ use crate::fs;
 pub fn Seo() -> impl IntoView {
     let image = format!("{SITE_URL}/og.png");
     let description = fs::intro();
+    // The intro is prose from a text file, and it goes into the graph below as
+    // a JSON string. A quote or a backslash in it would end the string early
+    // and leave invalid markup that nothing here would notice.
+    let quoted = description.replace('\\', "\\\\").replace('"', "\\\"");
 
-    // One graph: the person the site is about, and the site itself.
+    // One graph: the person, and the site.
     let json_ld = format!(
         r#"{{"@context":"https://schema.org","@graph":[
 {{"@type":"Person","name":"takashialpha","url":"{SITE_URL}","jobTitle":"Systems Developer",
-"description":"{description}",
+"description":"{quoted}",
 "knowsAbout":["Rust","Linux","Systems programming","Terminal applications"],
 "sameAs":["https://github.com/takashialpha","https://x.com/takashialphax","https://www.reddit.com/user/takashialpha"]}},
 {{"@type":"WebSite","name":"takashialpha","url":"{SITE_URL}","inLanguage":"en"}}]}}"#
@@ -28,8 +32,8 @@ pub fn Seo() -> impl IntoView {
 
     view! {
         <Title text="takashialpha"/>
-        // Same single source as the login banner, so the description can never
-        // drift from what the page actually says.
+        // The same source as the banner, so this cannot drift from what the
+        // page says.
         <Meta name="description" content=description/>
         <Link rel="canonical" href=SITE_URL/>
 
@@ -50,7 +54,7 @@ pub fn Seo() -> impl IntoView {
         <Meta name="twitter:description" content=description/>
         <Meta name="twitter:image" content=image/>
 
-        // `inner_html` keeps the JSON raw; script content is not HTML-decoded.
+        // `inner_html` keeps the JSON raw: script content is not HTML-decoded.
         <script type="application/ld+json" inner_html=json_ld></script>
     }
 }

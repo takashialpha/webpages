@@ -1,8 +1,8 @@
 //! Snake.
 //!
-//! Two cells to a character, using half blocks, so the playing field is square
-//! rather than twice as tall as it is wide. `0,0` is the top left and `y`
-//! counts down, the way the screen is drawn.
+//! Two cells to a character, using half blocks, so the field is square rather
+//! than twice as tall as it is wide. `0,0` is the top left and `y` counts down,
+//! the way the screen is drawn.
 
 #![deny(unsafe_code)]
 
@@ -36,8 +36,8 @@ mod tty {
     }
 
     pub fn width() -> usize {
-        // SAFETY: the host provides this import, and a module asking for one it
-        // does not provide fails to instantiate rather than linking to nothing.
+        // SAFETY: the host provides this. A module asking for an import it does
+        // not provide fails to instantiate rather than linking to nothing.
         count(unsafe { cols() })
     }
 
@@ -103,8 +103,8 @@ impl Way {
     }
 }
 
-/// Where we are in an escape sequence. Arrow keys arrive as `esc [ A`, and
-/// without tracking that a literal `A` would steer the snake.
+/// Where we are in an escape sequence. Arrows arrive as `esc [ A`, and without
+/// tracking that, a typed `A` would steer.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Reading {
     Plain,
@@ -115,8 +115,8 @@ enum Reading {
 struct Game {
     snake: VecDeque<Point>,
     heading: Way,
-    /// Taken at the moment of a step, so two turns in one frame cannot fold
-    /// the snake back on itself.
+    /// Read at the moment of a step, so two turns in one frame cannot fold the
+    /// snake back on itself.
     turning: Way,
     food: Point,
     cols: usize,
@@ -126,7 +126,6 @@ struct Game {
     best: u32,
     dead: bool,
     reading: Reading,
-    seed: u32,
 }
 
 impl Game {
@@ -143,15 +142,7 @@ impl Game {
             best: 0,
             dead: false,
             reading: Reading::Plain,
-            seed: 0x2545_f491,
         }
-    }
-
-    fn random(&mut self) -> usize {
-        self.seed ^= self.seed << 13;
-        self.seed ^= self.seed >> 17;
-        self.seed ^= self.seed << 5;
-        usize::try_from(self.seed).unwrap_or(0)
     }
 
     /// The field inside the frame, two game rows to a character row.
@@ -192,12 +183,12 @@ impl Game {
     }
 
     fn drop_food(&mut self) {
-        // A handful of tries, then the first free cell: random placement gets
+        // A few tries, then the first free cell: landing on one at random gets
         // unlikely once the snake fills the board.
         for _ in 0..64 {
             let spot = Point {
-                x: self.random() % self.cols,
-                y: self.random() % self.rows,
+                x: fastrand::usize(..self.cols),
+                y: fastrand::usize(..self.rows),
             };
             if !self.snake.contains(&spot) {
                 self.food = spot;
@@ -237,8 +228,8 @@ impl Game {
             return;
         };
 
-        // The last segment moves out of the way as the head moves in, so the
-        // cell it leaves is free. Unless there is food ahead, when it stays.
+        // The tail moves out as the head moves in, so the cell it leaves is
+        // free. Unless there is food ahead, when it stays put.
         let eating = next == self.food;
         let body = self.snake.iter().rev().skip(usize::from(!eating));
         if body.clone().any(|part| *part == next) {
@@ -303,7 +294,7 @@ impl Game {
         }
     }
 
-    /// What sits in each cell, laid out once so drawing does not search the
+    /// What is in each cell, laid out once so drawing does not search the
     /// snake for every one.
     fn occupancy(&self) -> Vec<Option<u8>> {
         let mut cells = vec![None; self.cols * self.rows];
@@ -327,7 +318,7 @@ impl Game {
         let cells = self.occupancy();
         let at = |x: usize, y: usize| cells[y * self.cols + x];
 
-        // The frame, so the wall you can die against is one you can see.
+        // So the wall you can die against is one you can see.
         let rule = "─".repeat(self.cols);
         let bottom = tty::height().saturating_sub(2);
         line(0, &format!("┌{rule}┐"), FRAME);
@@ -337,15 +328,14 @@ impl Game {
             let row = cy + 1;
             tty::draw(0, row, '│', FRAME, 0);
             for x in 0..self.cols {
-                // The upper half of a character is the smaller `y`, because
-                // `y` counts down the screen.
+                // The upper half is the smaller `y`, since `y` counts down.
                 let (upper, lower) = (at(x, cy * 2), at(x, cy * 2 + 1));
                 match (upper, lower) {
                     (None, None) => tty::draw(x + 1, row, ' ', 0, 0),
                     (Some(colour), None) => tty::draw(x + 1, row, '▀', colour, 0),
                     (None, Some(colour)) => tty::draw(x + 1, row, '▄', colour, 0),
                     // Two colours in one character: the lower half becomes the
-                    // background, so both still show.
+                    // background, so both show.
                     (Some(up), Some(down)) => tty::draw(x + 1, row, '▀', up, down),
                 }
             }
@@ -406,7 +396,7 @@ thread_local! {
     static GAME: RefCell<Game> = const { RefCell::new(Game::new()) };
 }
 
-/// Called once per animation frame. Non-zero quits.
+/// Called once a frame by the terminal, which owns the loop. Non-zero quits.
 ///
 /// The name has to survive mangling for the host to find it, and saying so is
 /// itself unsafe.
@@ -426,8 +416,8 @@ pub extern "C" fn frame(elapsed: f32) -> i32 {
 
         game.due += elapsed;
         let pace = game.pace();
-        // Bounded, so a backgrounded tab does not come back and run every step
-        // it missed at once.
+        // Bounded, so a backgrounded tab does not come back and run every
+        // step it missed at once.
         for _ in 0..4 {
             if game.due < pace {
                 break;
@@ -442,20 +432,10 @@ pub extern "C" fn frame(elapsed: f32) -> i32 {
     })
 }
 
-/// Run before the first frame, and where the seed comes from.
+/// Run before the first frame, so the board is already there when it arrives.
 fn main() {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(1, |since| fold(since.as_nanos()));
     GAME.with_borrow_mut(|game| {
-        game.seed ^= now | 1;
         game.restart();
         game.draw();
     });
-}
-
-/// The low bits of a wide number, without a cast that could lose more than it
-/// means to.
-fn fold(wide: u128) -> u32 {
-    u32::try_from(wide & u128::from(u32::MAX)).unwrap_or(1)
 }

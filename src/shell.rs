@@ -1,7 +1,7 @@
 //! Command types, dispatch, and completion.
 //!
-//! Commands are functions in a `&'static` registry. `help` and completion are
-//! generated from it, so they cannot fall out of step with what runs.
+//! Commands are functions in a `&'static` registry. `help` and completion both
+//! read it, so neither can fall behind what actually runs.
 
 use std::sync::Arc;
 
@@ -11,8 +11,8 @@ use crate::args::{About, Args, Completes, Spec};
 use crate::commands::COMMANDS;
 use crate::fs;
 
-/// A run of text and the CSS class the terminal paints it with. An empty class
-/// means the terminal's default foreground.
+/// A run of text and the class it is painted with. Empty means the default
+/// foreground.
 #[derive(Clone)]
 pub struct Span {
     pub text: String,
@@ -35,8 +35,8 @@ impl Span {
 /// One line of output.
 pub type Line = Vec<Span>;
 
-/// Where a command puts its output once it has some. Copy, so a task can
-/// carry it into whatever callback resolves.
+/// Where a command puts its output once it has some. Copy, so a task can carry
+/// one into whatever callback answers.
 #[derive(Clone, Copy)]
 pub struct Sink(RwSignal<Output>);
 
@@ -45,39 +45,35 @@ impl Sink {
         Self(cell)
     }
 
-    /// Replaces whatever the entry was showing. Calling this a second time
-    /// simply overwrites, which is what a command printing progress wants.
+    /// Replaces whatever the entry was showing. Calling it again overwrites,
+    /// which is what a command reporting progress wants.
     pub fn set(self, output: Output) {
         self.0.set(output);
     }
 }
 
-/// The work behind an [`Output::Pending`]. Run once, with somewhere to put
-/// the answer. Spawning is the task's own business.
+/// The work behind an [`Output::Pending`]: run once, given somewhere to put
+/// the answer. Spawning is its own business.
 pub type Task = Arc<dyn Fn(Sink) + Send + Sync>;
 
 /// What a command hands back to the terminal.
 #[derive(Clone)]
 pub enum Output {
     Lines(Vec<Line>),
-    /// Entries flowed into as many columns as the width allows, the way `ls`
-    /// lays itself out. The count is left to CSS so it adapts to the viewport
-    /// instead of assuming 80 columns.
+    /// Flowed into as many columns as fit, the way `ls` lays itself out. CSS
+    /// decides how many, so it follows the screen rather than assuming 80.
     Columns(Vec<Line>),
-    /// Lines too wide to wrap, which scroll sideways in their own box. A grid
-    /// stops being a grid the moment it wraps.
+    /// Too wide to wrap, so it scrolls sideways in its own box. A grid stops
+    /// being a grid the moment it wraps.
     Wide(Vec<Line>),
-    /// Nothing yet. The entry takes its place in the scrollback right away and
-    /// the task fills it in later, so the prompt comes back immediately rather
-    /// than the whole terminal waiting on a fetch.
+    /// Nothing yet. The entry goes into the scrollback now and the task fills
+    /// it in later, so the prompt comes back rather than waiting on a fetch.
     Pending(Task),
     /// Empties the scrollback, banner and all, the way `clear` does.
     Clear,
-    /// Hands the terminal to a program, which takes the whole screen until it
-    /// is done.
+    /// Hands the screen to a program until it is done.
     Run(&'static crate::program::Listing),
-    /// Ends the session: the shell prints its farewell and stops taking input,
-    /// the way a closed ssh connection does.
+    /// Ends the session, the way a closed ssh connection does.
     Exit,
     Nothing,
 }
@@ -87,7 +83,7 @@ pub fn pending(task: impl Fn(Sink) + Send + Sync + 'static) -> Output {
     Output::Pending(Arc::new(task))
 }
 
-/// Where the shell currently is, as segments below the root.
+/// Where the shell is, as segments below the top.
 #[derive(Clone)]
 pub struct Session {
     pub cwd: Vec<&'static str>,
@@ -115,9 +111,8 @@ impl Default for Session {
     }
 }
 
-/// Splits text into lines, turning bare URLs into links.
-///
-/// The one place output is clickable. Everything else is typed.
+/// Text as lines, with bare URLs turned into links. The one place output is
+/// clickable; everything else is typed.
 pub fn body(text: &str) -> Output {
     Output::Lines(body_lines(text))
 }
@@ -132,7 +127,7 @@ pub fn line(text: impl Into<String>) -> Output {
     Output::Lines(vec![vec![Span::plain(text)]])
 }
 
-/// A shell-style error, named after the shell the site is pretending to be.
+/// An error, named after the shell the site is pretending to be.
 pub fn error(text: impl Into<String>) -> Output {
     Output::Lines(vec![error_line(text)])
 }
@@ -142,37 +137,24 @@ pub fn error_line(text: impl Into<String>) -> Line {
     vec![Span::new(format!("swagsh: {}", text.into()), "err")]
 }
 
-/// Finds bare `http://` and `https://` runs and splits them into link spans.
+/// One line as plain runs and link runs.
+///
+/// URLs only. An email address would need a `mailto:` href, and the terminal
+/// builds an anchor straight out of the text it is handed.
 fn linkify(text: &str) -> Line {
-    let mut spans = Vec::new();
-    let mut rest = text;
+    let mut finder = linkify::LinkFinder::new();
+    finder.kinds(&[linkify::LinkKind::Url]);
 
-    loop {
-        // Earliest of the two schemes, since `https://` never contains `http://`.
-        let start = match (rest.find("https://"), rest.find("http://")) {
-            (Some(secure), Some(plain)) => secure.min(plain),
-            (Some(only), None) | (None, Some(only)) => only,
-            (None, None) => break,
-        };
-
-        let tail = &rest[start..];
-        let mut end = tail.find(char::is_whitespace).unwrap_or(tail.len());
-        // Sentence punctuation is not part of the URL.
-        while end > 0 && matches!(tail.as_bytes().get(end - 1), Some(b'.' | b',' | b')')) {
-            end -= 1;
-        }
-
-        if start > 0 {
-            spans.push(Span::plain(&rest[..start]));
-        }
-        spans.push(Span::new(&tail[..end], "link"));
-        rest = &tail[end..];
-    }
-
-    if !rest.is_empty() {
-        spans.push(Span::plain(rest));
-    }
-    spans
+    finder
+        .spans(text)
+        .map(|span| {
+            if span.kind().is_some() {
+                Span::new(span.as_str(), "link")
+            } else {
+                Span::plain(span.as_str())
+            }
+        })
+        .collect()
 }
 
 /// Runs one line of input.
@@ -189,23 +171,22 @@ pub fn run(session: &mut Session, input: &str) -> Output {
 
     match crate::args::parse(command.about(), &args) {
         Ok(parsed) => (command.run)(session, &parsed),
-        // Either the line was rejected or `-h` was asked for; both are already
-        // formatted, so there is nothing left to decide here.
+        // Rejected, or `-h` was asked for. Both are already written out.
         Err(output) => output,
     }
 }
 
-/// Resolves something that is not a builtin.
+/// Works out what to do with a word that is not a builtin.
 ///
-/// Only a path runs a program: `./bin/life` and `bin/life` work, a bare `life`
+/// Only a path runs a program: `./bin/life` and `bin/life` do, a bare `life`
 /// does not. There is no `PATH`, and inventing one would mean a name resolving
 /// to something the tree never said was there.
 fn launchable(session: &Session, name: &str, args: &[&str]) -> Output {
     let found = if name.contains('/') {
         match fs::resolve(&session.cwd, name).and_then(|segments| fs::node_at(&segments)) {
             Some(&fs::Node::Program(listing)) => Some(listing),
-            // It is there, it is just not something you can run. Saying only
-            // that it was not found would send someone looking for a typo.
+            // It is there, just not runnable. "not found" alone would send
+            // someone hunting for a typo.
             Some(_) => {
                 return Output::Lines(vec![
                     error_line(format!("command not found: {name}")),
@@ -225,8 +206,8 @@ fn launchable(session: &Session, name: &str, args: &[&str]) -> Output {
         return error(format!("command not found: {name}"));
     };
 
-    // Checked the same way a command's line is, so `life --help` answers and
-    // `life nonsense` is refused rather than quietly ignored.
+    // Checked like a command's line, so `life --help` answers and `life
+    // nonsense` is refused rather than quietly ignored.
     match crate::args::parse(listing.about(), args) {
         Ok(_) => Output::Run(listing),
         Err(output) => output,
@@ -249,8 +230,8 @@ pub struct Command {
     pub name: &'static str,
     /// One line, shown by `help`.
     pub summary: &'static str,
-    /// What the command accepts. Enforced before `run` is called, and read by
-    /// `help` and tab completion, so the three cannot disagree.
+    /// What it accepts. Enforced before `run`, and read by `help` and by
+    /// completion, so the three cannot disagree.
     pub spec: Spec,
     pub run: fn(&mut Session, &Args<'_>) -> Output,
 }
@@ -259,21 +240,20 @@ pub struct Command {
 pub struct Completion {
     /// The input line, extended as far as is unambiguous.
     pub line: String,
-    /// Every match, when more than one exists, for the shell to list.
+    /// Every match, when there is more than one, for the shell to list.
     pub candidates: Vec<String>,
 }
 
-/// Completes the last word of `input`: a command name in the first position, a
-/// path in any other.
+/// Completes the last word: a command name in the first position, a path
+/// anywhere else.
 pub fn complete(session: &Session, input: &str) -> Completion {
     let (head, word) = input
         .rfind(' ')
         .map_or(("", input), |space| input.split_at(space + 1));
 
     let candidates = if head.is_empty() {
-        // A command, or a path: running a program means typing a path to it,
-        // so the first word has to complete both. `bin/li` and `bi` are both
-        // on the way to the same thing.
+        // Both, because running a program means typing a path to it. `bi`
+        // and `bin/li` are on the way to the same thing.
         COMMANDS
             .iter()
             .map(|command| command.name.to_owned())
@@ -293,8 +273,8 @@ pub fn complete(session: &Session, input: &str) -> Completion {
         };
     };
 
-    // A lone match is finished, so add the separator a shell would: a space,
-    // unless it is a directory, where you carry on typing the path.
+    // One match is finished, so add what a shell would: a space, unless it is
+    // a directory, where you carry on typing.
     let completed = if candidates.len() == 1 {
         let sole = prefix.as_str();
         if sole.ends_with('/') {
@@ -316,8 +296,8 @@ pub fn complete(session: &Session, input: &str) -> Completion {
     }
 }
 
-/// Options for whichever command the line starts with, from its spec. Every
-/// command takes `-h`.
+/// The options the command at the head of the line takes. Every one takes
+/// `-h`.
 fn flag_candidates(head: &str, word: &str) -> Vec<String> {
     let Some(name) = head.split_whitespace().next() else {
         return Vec::new();
@@ -337,7 +317,7 @@ fn flag_candidates(head: &str, word: &str) -> Vec<String> {
     candidates
 }
 
-/// What the command at the head of the line can be given.
+/// What that command's operands can be.
 fn wanted(head: &str) -> Completes {
     head.split_whitespace()
         .next()

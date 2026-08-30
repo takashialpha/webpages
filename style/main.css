@@ -1,14 +1,13 @@
 /* ───────────────────────────────────────────────────────────────────────────
    takashialpha.com, as a tty.
 
-   The IBM VGA 8x16 ROM font: the one a text-mode console and a bios screen
-   actually draw. Its cell is 8 wide by 16 tall, so it is only crisp at multiples
-   of 16px, and `line-height: 1` is the real cell height rather than a guess.
-   No fluid type anywhere.
+   Set in the IBM VGA 8x16 ROM font, the one a text-mode console draws. Its cell
+   is 8 by 16, so it is only crisp at multiples of 16px and there is no fluid
+   type anywhere. `line-height: 1` is the real cell height, not a guess.
 
-   It has no bold face. A console fakes bold with a bright color, and so does
-   this stylesheet, because asking for a weight the font does not have gets you a
-   smeared synthetic bold.
+   It has no bold face. A console fakes bold with a bright colour and so does
+   this, because asking for a weight the font does not have gets you a smeared
+   synthetic one.
    ─────────────────────────────────────────────────────────────────────────── */
 
 @font-face {
@@ -21,7 +20,7 @@
 
 /* ── palettes ───────────────────────────────────────────────────────────────
    A palette is a `data-theme` value and nothing else, so adding one is a block
-   of custom properties here plus a line in theme.rs.
+   of properties here and a line in theme.rs.
    ─────────────────────────────────────────────────────────────────────────── */
 
 :root,
@@ -35,8 +34,8 @@
   --err: #ff5555;
   --link: #55ffff;
 
-  /* The sixteen colours a program draws with, in the order every terminal
-     numbers them. These are the vga hardware palette. */
+  /* The sixteen a program draws with, in the order every terminal numbers
+     them. These are the vga hardware colours. */
   --c0: #000000;
   --c1: #aa0000;
   --c2: #00aa00;
@@ -127,25 +126,24 @@ body {
   height: 100%;
   margin: 0;
   padding: 0;
-  /* The terminal is fixed to the visible viewport, so the page behind it has
+  /* The terminal is fixed to the visible viewport, so the page behind has
      nothing to scroll. On ios it is that page scroll which drags a fixed
-     element out of position and leaves it behind until the gesture ends. */
+     element out of place and leaves it there until the gesture ends. */
   overflow: hidden;
 }
 
 body {
   background: var(--bg);
   color: var(--fg);
-  /* The generic stack is the only fallback, since the site ships one face. */
+  /* One face is shipped, so the generic stack is the whole fallback. */
   font-family: "VGA", ui-monospace, monospace;
   /* One cell. Also the floor below which ios zooms a focused input. */
   font-size: 16px;
-  /* The cell, as an exact number of pixels.
-     Not `ch`: that unit comes from a metric the woff2 conversion rounded, and
-     measures 15.9998px where every glyph actually advances 16. Laying anything
-     out on it puts text on fractional pixels, which rasterises differently
-     from the same text on whole ones, and the difference is visible. The
-     bitmap is 8 by 16, so the cell is always half the type size. */
+  /* The cell, as an exact number of pixels. Not `ch`: that comes from a metric
+     the woff2 conversion rounded, and reads 15.9998px where every glyph really
+     advances 16. Laying anything out on it puts text on fractional pixels,
+     which rasterises visibly differently. The bitmap is 8 by 16, so the cell is
+     always half the type size. */
   --cell: 8px;
   /* The cell is exactly one em tall, so a console has no leading. */
   line-height: 1;
@@ -154,23 +152,21 @@ body {
 
 @media (min-width: 720px) {
   body {
-    /* Doubled, the way a console doubles its font on a hidpi screen. Each cell
-       is then 16px wide, which lands 78 to 84 columns on a desktop, the width a
-       real console runs at. 20px would be blurry: the bitmap only divides by
-       16. */
+    /* Doubled, the way a console doubles its font on a hidpi screen. A 16px
+       cell lands 78 to 84 columns on a desktop, which is the width a real
+       console runs at. 20px would be blurry: the bitmap only divides by 16. */
     font-size: 32px;
     --cell: 16px;
   }
 }
 
-/* A tty is a fixed screen that scrolls its own contents, with no scrollbar
-   furniture anywhere. Text fills from the top, and once it overflows the older
-   lines run off above. Wheel and touch still scroll back through them. */
+/* A fixed screen that scrolls its own contents, with no scrollbar furniture.
+   Text fills from the top and the older lines run off above. Wheel and touch
+   still scroll back through them. */
 .tty {
-  /* Sized to the visual viewport rather than the layout one, because those come
-     apart the moment a phone raises its keyboard, and only the visual one is
-     the screen you can see. viewport.rs measures it; `100dvh` is the fallback
-     until it has. */
+  /* The visual viewport, not the layout one: those come apart the moment a
+     phone raises its keyboard, and only the visual one is the screen you can
+     see. viewport.rs measures it; `100dvh` holds until it has. */
   position: fixed;
   top: var(--screen-top, 0);
   left: 0;
@@ -179,7 +175,7 @@ body {
   display: flex;
   flex-direction: column;
   cursor: text;
-  /* There is no mouse on a tty. Clicks hand the keyboard back instead of
+  /* There is no mouse on a tty. A click hands the keyboard back rather than
      starting a selection, so the shell never quietly stops listening. Links and
      the prompt opt back in below. */
   -webkit-user-select: none;
@@ -192,22 +188,19 @@ body {
   user-select: text;
 }
 
-/* The one scroller on the page. It takes whatever height the key row leaves,
-   so output never runs on underneath the row and the prompt scrolls to a
-   bottom that really is the bottom. */
+/* The one scroller on the page. It takes whatever the key row leaves, so
+   output never runs on underneath and the prompt scrolls to a bottom that
+   really is the bottom. */
 .screen {
   flex: 1 1 auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
   padding: 12px;
-  /* A console fills from the top and only reaches the bottom once it has
-     scrolled, so nothing pins the prompt down there.
-
-     The padding is added on rather than included: `box-sizing: border-box`
-     otherwise takes it out of the character count, and the last column ends up
-     sliced down the middle. 85 is what the framed board needs, being its 80
-     columns, a border either side, and the row numbers up the left. */
+  /* Padding added on rather than included: under `box-sizing: border-box` it
+     would come out of the character count and slice the last column down the
+     middle. 85 is what the framed board needs: 80 columns, a border either
+     side, and the row numbers up the left. */
   max-width: calc(85 * var(--cell) + 24px);
 }
 
@@ -227,25 +220,29 @@ body {
   display: none;
 }
 
-/* Out of sight, but still there to be focused. The input inside the scrollback
-   is the terminal's keyboard, and an element that is `display: none` cannot
-   hold focus, so hiding the scrollback that way while a program runs would
-   quietly stop the program receiving keys. */
+/* Out of sight while a program runs, but still there to be focused: the input
+   inside the scrollback is the terminal's keyboard, and a `display: none`
+   element cannot hold focus, so hiding it that way would quietly stop the
+   program getting keys.
+
+   Invisible at full size, rather than shrunk to a clipped pixel. Shrinking it
+   breaks two things. Its scroll position has nowhere to live, so where the
+   scrollback lands afterwards is left to whatever the browser does with an
+   offset it can no longer honour. And the focused input inside ends up
+   somewhere absurd, which ios tries to scroll the page to, dragging the fixed
+   terminal out of place.
+
+   It lies over the alternate screen and takes no taps, so a tap during a
+   program still reaches the terminal and hands the keyboard back. */
 .stashed {
   position: absolute;
-  width: 1px;
-  height: 1px;
-  /* Zeroed, or the padding alone would keep the box its own size: under
-     `border-box` a height smaller than the padding is simply ignored. */
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
-/* Output too wide for the screen, which is the graffiti board on a phone: it
-   scrolls sideways in its own box rather than wrapping, because a wrapped grid
-   is not a grid any more. */
+/* Too wide for the screen, which on a phone means the graffiti board. It
+   scrolls sideways rather than wrapping, because a wrapped grid is not one. */
 .wide {
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -262,8 +259,7 @@ body {
 }
 
 /* `ls` output. Auto-fill rather than a fixed count, so it columns on a wide
-   screen and collapses to one column on a phone, which is what a terminal does
-   when it runs out of width. */
+   screen and collapses to one on a phone, the way a terminal does. */
 .cols {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(calc(20 * var(--cell)), 1fr));
@@ -272,16 +268,15 @@ body {
 
 /* ── the alternate screen ───────────────────────────────────────────────────
    A program takes the whole terminal and draws into a grid of cells. It sits
-   over the scrollback rather than replacing it, so leaving puts everything
-   back exactly as it was, the way `vim` exiting does not eat your history.
+   under the scrollback rather than replacing it, so leaving puts everything
+   back exactly as it was.
    ─────────────────────────────────────────────────────────────────────────── */
 
 .alt {
   flex: 1 1 auto;
   overflow: hidden;
-  /* No wrapping and no selection: this is a screen, not a document. Every row
-     is exactly as wide as the grid, and a wrapped row would push the rest of
-     the picture down. */
+  /* No wrapping and no selection: this is a screen, not a document. A wrapped
+     row would push the rest of the picture down. */
   white-space: pre;
   -webkit-user-select: none;
   user-select: none;
@@ -292,7 +287,7 @@ body {
   min-height: 1em;
 }
 
-/* One class per colour rather than an inline style, so a repaint changes the
+/* A class per colour rather than an inline style, so a repaint changes the
    text of a run and never its attributes. */
 .f0 { color: var(--c0); }
 .f1 { color: var(--c1); }
@@ -368,16 +363,16 @@ a:focus-visible,
 }
 
 /* ── the prompt line ────────────────────────────────────────────────────────
-   The input is the real one, inline and unstyled, so the caret sits where the
-   text cursor actually is.
+   A real input, inline and unstyled, so the caret is where the text cursor
+   actually is.
    ─────────────────────────────────────────────────────────────────────────── */
 
 .current {
   display: flex;
   align-items: baseline;
-  /* The literal space between the prompt and the input would be collapsed by
-     flex layout, so the gap supplies it. One cell exactly, so the input starts
-     on the same pixel the echoed line's text will. */
+  /* Flex would collapse the literal space between the prompt and the input, so
+     the gap supplies it. One cell exactly, so the input starts on the pixel the
+     echoed line's text will. */
   gap: var(--cell);
 }
 
@@ -386,14 +381,14 @@ a:focus-visible,
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
-  /* The mirrored text is as long as the line, so it has to be cut off at the
-     field rather than running on past the edge of the screen. */
+  /* The drawn text is as long as the line, so it is cut off here rather than
+     running past the edge of the screen. */
   overflow: hidden;
 }
 
-/* The typed text, overlaid on the input that is really holding it. Laid out
-   exactly as the echoed line lays out the same characters, because it is the
-   same kind of element with the same rules. */
+/* The typed text, over the input that is really holding it. Laid out exactly
+   as the echoed line lays out the same characters, being the same kind of
+   element. */
 .field .typed {
   position: absolute;
   top: 0;
@@ -403,8 +398,8 @@ a:focus-visible,
   pointer-events: none;
 }
 
-/* What was typed, echoed into the scrollback. Shares the input's colour so a
-   line does not dim the instant it is run. */
+/* Echoed into the scrollback. Shares the input's colour so a line does not dim
+   the instant it is run. */
 .typed {
   color: var(--bright);
 }
@@ -415,28 +410,27 @@ a:focus-visible,
   padding: 0;
   border: 0;
   background: transparent;
-  /* The input holds the text and takes the keys, but does not draw it: the
-     span over it does. Transparent rather than hidden, so the selection it
-     draws still shows, behind those glyphs. */
+  /* It holds the text and takes the keys but does not draw it; the span over
+     it does. Transparent rather than hidden, so the selection it draws still
+     shows behind those glyphs. */
   color: transparent;
   font: inherit;
   /* One line, said as a height. Firefox will not take a `line-height` below
      normal on an input, so it lays one out 1.2 lines tall while everything
-     around it is 1, and baseline alignment then drops the prompt by the
-     difference. That is the prompt jumping when a line is echoed. */
+     around it is 1, and baseline alignment drops the prompt by the difference.
+     That is the prompt jumping when a line is echoed. */
   height: 1em;
-  /* The real caret is a thin bar. A console blinks an underscore, so the native
-     one is hidden and `.cursor` is drawn instead. */
+  /* A console blinks an underscore rather than a thin bar, so the native caret
+     is hidden and `.cursor` is drawn instead. */
   caret-color: transparent;
-  /* One cell of room at the end. A line longer than the field scrolls so the
-     caret sits against the right edge, and the block cursor drawn there is a
-     whole cell wide: without this it hangs off the end and is clipped. */
+  /* A cell of room at the end. A long line scrolls until the caret is against
+     the right edge, and the block cursor there is a whole cell wide; without
+     this it hangs off and is clipped. */
   padding-right: var(--cell);
 }
 
-/* Placed by column rather than measured: the font is fixed width, so the
-   column times the cell is exactly where the caret is, and stays right after an
-   arrow key. */
+/* Placed by column rather than measured. Fixed width font, so the column times
+   the cell is exactly where the caret is, and stays right after an arrow. */
 .cursor {
   position: absolute;
   top: 0;
@@ -462,9 +456,9 @@ a:focus-visible,
 }
 
 /* ── the extra-keys row ─────────────────────────────────────────────────────
-   Phones have no tab and no arrows. Mobile terminal emulators answer this with
-   a key row above the keyboard, so this does too. Anything with a real keyboard
-   never sees it.
+   A phone keyboard has no tab and no arrows. Mobile terminal emulators answer
+   that with a key row of their own, so this does too. Anything with a real
+   keyboard never sees it.
    ─────────────────────────────────────────────────────────────────────────── */
 
 .keys {
@@ -472,10 +466,9 @@ a:focus-visible,
 }
 
 @media (hover: none) and (pointer: coarse) {
-  /* A flex item under the screen, not an overlay on top of it. Nothing has to
-     reserve space for it, it cannot be scrolled away, and it cannot land under
-     the keyboard, because the box it sits in is only ever as tall as the part
-     of the screen you can see. */
+  /* A flex item under the screen, not an overlay. Nothing has to reserve space
+     for it, it cannot be scrolled away, and it cannot land under the keyboard,
+     because the box it sits in is only ever as tall as what you can see. */
   .keys {
     flex: 0 0 auto;
     display: flex;
@@ -488,8 +481,8 @@ a:focus-visible,
 
 .key {
   flex: 1 1 0;
-  /* 44px tall including the border, the smallest target a thumb hits
-     reliably. The row is the only thing on the page meant to be tapped. */
+  /* 44px including the border, the smallest target a thumb hits reliably.
+     These are the only things on the page meant to be tapped. */
   min-height: 44px;
   padding: 0;
   border: 1px solid var(--dim);
@@ -497,7 +490,7 @@ a:focus-visible,
   color: var(--fg);
   font: inherit;
   cursor: pointer;
-  /* No double-tap-to-zoom, so repeated taps on `up` register as taps. */
+  /* No double-tap-to-zoom, so two taps on `up` are two taps. */
   touch-action: manipulation;
 }
 

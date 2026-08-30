@@ -1,8 +1,8 @@
 //! The graffiti board: a shared grid anyone can write to.
 //!
-//! Bounded on purpose. A write is one printable character at one coordinate,
-//! so the worst anyone can do is spell something the next visitor writes over.
-//! It is stored as plain text, so moderating it is editing a file.
+//! Small on purpose. A write is one printable character at one coordinate, so
+//! the worst anyone can do is spell something the next visitor writes over. It
+//! is stored as plain text, so moderating it is editing a file.
 
 /// Eighty by twenty-four, like a terminal. It does not fit a phone, so the
 /// `wall` command puts it in a box that scrolls sideways.
@@ -12,14 +12,14 @@ pub const ROWS: usize = 24;
 /// An unwritten cell.
 pub const BLANK: u8 = b' ';
 
-/// Printable ASCII only, checked at every edge, so a control character never
-/// reaches the file or anyone else.
+/// Printable ASCII only, checked at every edge, so nothing else ever reaches
+/// the file or another visitor.
 #[must_use]
 pub const fn printable(byte: u8) -> bool {
     byte >= 0x20 && byte <= 0x7e
 }
 
-/// The board itself. Fixed size, so it cannot grow whatever arrives.
+/// The board itself. Fixed size, whatever arrives.
 #[derive(Clone)]
 pub struct Grid([[u8; COLS]; ROWS]);
 
@@ -32,7 +32,7 @@ impl Grid {
     /// Sets one cell. `0,0` is the bottom left and `y` counts up, as drawn.
     ///
     /// Storage runs the other way, top row first, so the file reads in the
-    /// order the board is drawn. This is where the two meet.
+    /// order the board is drawn. Here is where the two meet.
     pub const fn set(&mut self, x: usize, y: usize, byte: u8) -> bool {
         if x >= COLS || y >= ROWS || !printable(byte) {
             return false;
@@ -45,7 +45,7 @@ impl Grid {
         true
     }
 
-    /// Reads back what is stored, one string per row.
+    /// What is stored, one string per row.
     #[must_use]
     pub fn rows(&self) -> Vec<String> {
         self.0
@@ -62,9 +62,9 @@ impl Grid {
         text
     }
 
-    /// Reads the stored form back, forgivingly. A short line is padded and a
-    /// long one is cut, so hand-editing the file cannot put the board into a
-    /// shape the rest of the code does not expect.
+    /// The stored form back, forgivingly: a short line is padded and a long
+    /// one is cut, so hand-editing cannot leave the board a shape the rest of
+    /// the code does not expect.
     #[must_use]
     pub fn parse(text: &str) -> Self {
         let mut grid = Self::blank();
@@ -85,11 +85,11 @@ impl Default for Grid {
     }
 }
 
-/// Cells one address may set per [`WINDOW`]: a row's worth.
+/// Cells one address may set a minute: a row's worth.
 #[cfg(feature = "ssr")]
 pub const BUDGET: u32 = 80;
 
-/// Cells everyone together may write per [`WINDOW`].
+/// Cells everyone together may write a minute.
 ///
 /// The address comes from a header. Behind Cloudflare that is trustworthy, but
 /// anything reaching the origin directly could claim a new one per request and
@@ -97,131 +97,46 @@ pub const BUDGET: u32 = 80;
 #[cfg(feature = "ssr")]
 pub const CEILING: u32 = 600;
 
-#[cfg(feature = "ssr")]
-pub const WINDOW: std::time::Duration = std::time::Duration::from_secs(60);
-
-/// How many addresses are remembered at once.
+/// How many addresses to hold before sweeping the spent ones out.
 ///
 /// The key comes from a header, so whoever chooses it must not also choose how
-/// much is remembered. Past the cap the oldest is dropped.
+/// much is remembered.
 #[cfg(feature = "ssr")]
 const TRACKED: usize = 4096;
 
-/// One address's writes in the current window. Fixed size, so remembering
-/// someone costs the same however much they write.
+/// A quota of `per_minute` cells. Zero would be one a minute, but neither of
+/// the two is zero.
 #[cfg(feature = "ssr")]
-#[derive(Clone, Copy)]
-struct Window {
-    start: std::time::Instant,
-    cells: u32,
-}
-
-#[cfg(feature = "ssr")]
-impl Window {
-    const fn opened(now: std::time::Instant) -> Self {
-        Self {
-            start: now,
-            cells: 0,
-        }
-    }
-
-    /// Rolls over once the window has elapsed.
-    fn current(self, now: std::time::Instant) -> Self {
-        if now.duration_since(self.start) >= WINDOW {
-            Self::opened(now)
-        } else {
-            self
-        }
-    }
-}
-
-#[cfg(feature = "ssr")]
-struct Limiter {
-    seen: std::collections::HashMap<String, Window>,
-    everyone: Window,
-}
-
-#[cfg(feature = "ssr")]
-impl Limiter {
-    fn new() -> Self {
-        Self {
-            seen: std::collections::HashMap::new(),
-            everyone: Window::opened(std::time::Instant::now()),
-        }
-    }
-
-    /// Whether `who` may write `cells` more, counting them if so.
-    ///
-    /// All or nothing, so nobody has to wonder which half of a write landed.
-    fn take(&mut self, who: &str, cells: u32) -> bool {
-        let now = std::time::Instant::now();
-
-        self.everyone = self.everyone.current(now);
-        if self.everyone.cells.saturating_add(cells) > CEILING {
-            return false;
-        }
-
-        // Only at the cap. Scanning on every write would make each one cost
-        // whatever the table had grown to.
-        if self.seen.len() >= TRACKED {
-            self.seen
-                .retain(|_, window| now.duration_since(window.start) < WINDOW);
-            while self.seen.len() >= TRACKED {
-                let Some(oldest) = self
-                    .seen
-                    .iter()
-                    .min_by_key(|(_, window)| window.start)
-                    .map(|(who, _)| who.clone())
-                else {
-                    break;
-                };
-                self.seen.remove(&oldest);
-            }
-        }
-
-        let mine = self
-            .seen
-            .entry(who.to_owned())
-            .or_insert_with(|| Window::opened(now))
-            .current(now);
-
-        if mine.cells.saturating_add(cells) > BUDGET {
-            return false;
-        }
-
-        self.seen.insert(
-            who.to_owned(),
-            Window {
-                start: mine.start,
-                cells: mine.cells.saturating_add(cells),
-            },
-        );
-        self.everyone.cells = self.everyone.cells.saturating_add(cells);
-        true
-    }
+fn quota(per_minute: u32) -> governor::Quota {
+    governor::Quota::per_minute(
+        std::num::NonZeroU32::new(per_minute).unwrap_or(std::num::NonZeroU32::MIN),
+    )
 }
 
 /// The board, who has been writing to it, and where it is kept.
 #[cfg(feature = "ssr")]
 pub struct State {
     grid: std::sync::RwLock<Grid>,
-    limiter: std::sync::Mutex<Limiter>,
+    /// What one address may write, and what everyone together may.
+    mine: governor::DefaultKeyedRateLimiter<String>,
+    everyone: governor::DefaultDirectRateLimiter,
     path: std::path::PathBuf,
-    /// When the file last matched what is held here. A newer file means
-    /// somebody edited it, and it is read back before the next answer.
+    /// When the file last matched this. A newer one means somebody edited it,
+    /// so it is read back before the next answer.
     synced: std::sync::Mutex<Option<std::time::SystemTime>>,
 }
 
 #[cfg(feature = "ssr")]
 impl State {
-    /// Loads the board from `path`, starting blank if it is not there yet.
+    /// Loads the board, starting blank if the file is not there yet.
     #[must_use]
     pub fn load(path: std::path::PathBuf) -> Self {
         let grid = std::fs::read_to_string(&path)
             .map_or_else(|_| Grid::blank(), |text| Grid::parse(&text));
         let state = Self {
             grid: std::sync::RwLock::new(grid),
-            limiter: std::sync::Mutex::new(Limiter::new()),
+            mine: governor::RateLimiter::keyed(quota(BUDGET)),
+            everyone: governor::RateLimiter::direct(quota(CEILING)),
             synced: std::sync::Mutex::new(None),
             path,
         };
@@ -236,9 +151,8 @@ impl State {
             .ok()
     }
 
-    /// Records that the file now matches what is held here. Call after writing
-    /// it, or the next read will see a newer file and load back what it just
-    /// wrote.
+    /// Says the file now matches this. Call after writing it, or the next read
+    /// sees a newer file and loads back what it just wrote.
     pub fn saved(&self) {
         *self
             .synced
@@ -248,9 +162,9 @@ impl State {
 
     /// Reads the file back if it has changed since this last wrote it.
     ///
-    /// Editing the file is how the board is moderated, so an edit has to take
-    /// effect without a restart. Checked when the board is read or written
-    /// rather than watched, which needs nothing to be running in between.
+    /// Editing it is how the board is moderated, so an edit has to land without
+    /// a restart. Checked on read and on write rather than watched, so nothing
+    /// has to be running in between.
     fn refresh(&self) {
         let Some(touched) = self.touched() else {
             return;
@@ -276,25 +190,38 @@ impl State {
     pub fn render(&self) -> String {
         self.refresh();
         // A poisoned lock still holds a perfectly good grid: whatever panicked
-        // happened elsewhere, and losing the board over it would be worse.
+        // did so elsewhere, and losing the board over it would be worse.
         self.grid
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .render()
     }
 
-    pub fn allowed(&self, who: &str, cells: u32) -> bool {
-        self.limiter
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take(who, cells)
+    /// Whether `who` may write one more cell, counting it if so.
+    ///
+    /// Their own budget first, then everyone's. A refused check costs nothing,
+    /// so that order leaves the ceiling for people who have not used their own
+    /// budget up, rather than letting one address spend everyone's on writes
+    /// that were going to be refused anyway.
+    ///
+    /// Asking about an address is what starts remembering it, so the table is
+    /// swept rather than held down by the ceiling.
+    pub fn allowed(&self, who: &str) -> bool {
+        // Only once it has grown, and it only drops addresses whose budget has
+        // fully refilled, so this cannot forget anyone still being limited.
+        if self.mine.len() >= TRACKED {
+            self.mine.retain_recent();
+            self.mine.shrink_to_fit();
+        }
+
+        self.mine.check_key(&who.to_owned()).is_ok() && self.everyone.check().is_ok()
     }
 
-    /// Sets one cell. Returns the board's new form when it changed, which is
-    /// what the caller persists, or `None` when nothing did.
+    /// Sets one cell. Returns the board to write out when it changed, and
+    /// `None` when nothing did.
     pub fn set(&self, x: usize, y: usize, byte: u8) -> Option<String> {
-        // So a write lands on top of whatever the file says now, rather than
-        // on a copy from before somebody edited it.
+        // So the write lands on what the file says now, not on a copy from
+        // before somebody edited it.
         self.refresh();
         let mut grid = self
             .grid
@@ -307,15 +234,15 @@ impl State {
         &self.path
     }
 
-    /// Writes the board where it will be kept, creating it if it is not there.
+    /// Writes the board out, creating the file if it is not there.
     ///
-    /// Called once at startup so a board that cannot be saved is an error in
-    /// the journal, not a surprise at the first write.
+    /// Called once at startup, so a board that cannot be saved is an error in
+    /// the journal rather than a surprise at the first write.
     ///
     /// # Errors
     ///
-    /// Whatever stopped the write: usually the directory not existing, or the
-    /// service not being allowed to write it.
+    /// Whatever stopped the write: usually the directory not being there, or
+    /// the service not being allowed to write it.
     pub fn persist(&self) -> std::io::Result<()> {
         let written = std::fs::write(&self.path, self.render());
         self.saved();
@@ -325,15 +252,14 @@ impl State {
 
 /// Parses `x y char`.
 ///
-/// The character is optional: `4 2` clears the cell, and `4 2 ` with a
-/// trailing space sets one. That is the only way to reach a blank through a
-/// line split on whitespace.
+/// The character is optional: `4 2` clears the cell. That is the only way to
+/// ask for a blank through a line that was split on whitespace.
 ///
-/// Validated here, so a handler only sees writes it can carry out.
+/// Checked here, so a handler only ever sees a write it can carry out.
 #[must_use]
 pub fn parse_write(body: &str) -> Option<(usize, usize, u8)> {
-    // Trailing newlines are the client's, not the writer's. A trailing space is
-    // the writer's, and is the whole point, so it stays.
+    // A trailing newline is the client's. A trailing space is the writer's,
+    // and is the whole point, so it stays.
     let body = body.trim_end_matches(['\n', '\r']);
     let mut parts = body.splitn(3, ' ');
 
@@ -344,14 +270,14 @@ pub fn parse_write(body: &str) -> Option<(usize, usize, u8)> {
         // Nothing after the coordinates clears the cell.
         None | Some(b"") => BLANK,
         Some(&[byte]) => byte,
-        // Anything longer is a mistake worth reporting rather than truncating.
+        // Anything longer is worth reporting rather than truncating.
         Some(_) => return None,
     };
 
     (x < COLS && y < ROWS && printable(byte)).then_some((x, y, byte))
 }
 
-/// Fetches the board, or writes to it and fetches the result.
+/// Reads the board, or writes one cell and reads back the result.
 ///
 /// Returns the status with the body: the server explains a refusal in a
 /// sentence, and that sentence is what to show.
@@ -396,7 +322,7 @@ pub async fn fetch(write: Option<&str>) -> Result<(u16, String), String> {
         .ok_or_else(|| "wall: the board's answer was not text".to_owned())
 }
 
-/// The server has no browser to ask. This exists so the command compiles there.
+/// The server has no browser to ask. Here so the command still compiles.
 ///
 /// # Errors
 ///

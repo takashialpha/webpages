@@ -1,17 +1,17 @@
 //! Programs: draw a frame, take a key, say when to stop.
 //!
 //! The terminal owns the loop and calls in. It has to: WebAssembly cannot
-//! suspend a synchronous call, so a guest running its own loop would freeze
-//! the page until it finished.
+//! suspend a synchronous call, so a program running its own loop would hold the
+//! page still until it finished.
 
 use crate::screen::Screen;
 
 /// What a program does with a frame.
 pub enum Step {
-    /// Carry on. The screen is drawn as it now stands.
+    /// Carry on. The screen is drawn as it stands.
     Running,
-    /// Finished. The alternate screen goes away and the scrollback comes back
-    /// exactly as it was.
+    /// Finished. The alternate screen goes and the scrollback comes back as it
+    /// was.
     Done,
 }
 
@@ -19,25 +19,22 @@ pub trait Program {
     /// Called once before the first frame, with the screen already sized.
     fn start(&mut self, _screen: &mut Screen) {}
 
-    /// Draws one frame. `elapsed` is milliseconds since the last one, so a
-    /// program moves at the same speed on any refresh rate.
+    /// One frame. `elapsed` is milliseconds since the last, so a program runs
+    /// at the same speed on any refresh rate.
     fn frame(&mut self, screen: &mut Screen, elapsed: f64) -> Step;
 
-    /// One keypress, named the way a browser names it: a single character for
-    /// an ordinary key, or a word like `ArrowLeft` or `Escape`.
+    /// One keypress, named the way a browser names it: one character for an
+    /// ordinary key, or a word like `ArrowLeft`.
     fn key(&mut self, _key: &str) {}
 }
 
-/// A program, as the filesystem holds it.
-///
-/// There is no separate registry: programs are entries in `~/bin`, so the tree
-/// is the only place that says what exists.
+/// A program, as the tree holds it. There is no separate registry: `~/bin` is
+/// the only place that says what exists.
 pub struct Listing {
     pub name: &'static str,
     pub summary: &'static str,
     pub spec: crate::args::Spec,
-    /// Where the code is, relative to the page, so it does not care where the
-    /// site is mounted.
+    /// Where the code is, relative to the page.
     pub url: &'static str,
 }
 
@@ -66,6 +63,13 @@ pub const SNAKE: Listing = Listing {
     url: "bin/snake.wasm",
 };
 
+pub const TETRIS: Listing = Listing {
+    name: "tetris",
+    summary: "stack the falling blocks",
+    spec: crate::args::Spec::NONE,
+    url: "bin/tetris.wasm",
+};
+
 pub const STARS: Listing = Listing {
     name: "stars",
     summary: "a drifting starfield",
@@ -84,6 +88,10 @@ pub const BIN: &[crate::fs::Entry] = &[
         node: crate::fs::Node::Program(&SNAKE),
     },
     crate::fs::Entry {
+        name: TETRIS.name,
+        node: crate::fs::Node::Program(&TETRIS),
+    },
+    crate::fs::Entry {
         name: STARS.name,
         node: crate::fs::Node::Program(&STARS),
     },
@@ -98,8 +106,8 @@ pub enum Opened {
 /// Fetches a guest and works out which shape it is.
 ///
 /// One that exports `frame` draws, a frame at a time. One that only exports
-/// `_start` runs to completion here: it takes microseconds, and what it
-/// printed belongs in the scrollback.
+/// `_start` runs to the end here: it takes microseconds, and what it printed
+/// belongs in the scrollback.
 ///
 /// # Errors
 ///
@@ -119,7 +127,7 @@ pub async fn open_guest(url: &str) -> Result<Opened, String> {
     }
 
     let (mut lines, note) = match guest.run() {
-        // A program that worked says nothing about having worked.
+        // Nothing to add when it worked.
         Finished::Exited { code, output } => (
             body_lines(&output),
             (code != 0).then(|| vec![Span::new(format!("exit {code}"), "dim")]),
@@ -144,8 +152,8 @@ pub async fn open_guest(_url: &str) -> Result<Opened, String> {
     Err("no browser to run a program in".to_owned())
 }
 
-/// The trait exists so the terminal can hold a program without knowing
-/// whether its build has a browser to run one.
+/// The trait is what lets the terminal hold a program without knowing whether
+/// its build has a browser to run one in.
 #[cfg(feature = "hydrate")]
 impl Program for crate::wasi::Guest {
     fn start(&mut self, screen: &mut Screen) {
