@@ -40,7 +40,8 @@ pub fn uptime_secs() -> i64 {
 /// background, unlike an interval, which browsers throttle to about once a
 /// minute and which would therefore undercount.
 #[cfg(feature = "hydrate")]
-fn since_load_millis() -> f64 {
+#[must_use]
+pub fn since_load_millis() -> f64 {
     leptos::prelude::window()
         .performance()
         .map_or(0.0, |performance| performance.now())
@@ -124,4 +125,11 @@ const fn civil_from_days(days: i64) -> (i64, i64, i64) {
     };
 
     (if month <= 2 { year + 1 } else { year }, month, day)
+}
+
+/// The server has no page to have been open, and never runs a frame.
+#[cfg(not(feature = "hydrate"))]
+#[must_use]
+pub const fn since_load_millis() -> f64 {
+    0.0
 }

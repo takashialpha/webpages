@@ -15,12 +15,16 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
+          # wasip1 is for the guest programs in bin/, which are separate
+          # crates built for a different target than the site itself.
+          targets: wasm32-unknown-unknown, wasm32-wasip1
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-leptos
-      - run: cargo leptos build --release
+          tool: cargo-leptos, just
+      # Guests first, because they land in `public/`, which is what
+      # cargo-leptos copies into the site. One recipe is the whole build.
+      - run: just build
       - name: Package
         run: |
           mkdir -p dist

@@ -1,17 +1,24 @@
 // Large static view trees produce deeply nested generic future types; the async
 // SSR-resolve / hydrate paths exceed the default query depth of 128 in release.
 #![recursion_limit = "256"]
+// Stricter than the workspace, which only denies it: nothing in the site
+// needs unsafe, so nothing may reintroduce it.
+#![forbid(unsafe_code)]
 
 pub mod app;
 pub mod args;
 pub mod clock;
 pub mod commands;
 pub mod fs;
+pub mod program;
+pub mod screen;
 pub mod seo;
 pub mod shell;
 pub mod terminal;
 pub mod theme;
 pub mod viewport;
+pub mod wall;
+pub mod wasi;
 
 /// Canonical origin of the deployed site. Used to build absolute URLs for the
 /// canonical link, Open Graph tags, and the sitemap.

@@ -4,7 +4,11 @@
 //! completion are both generated from the same slice and cannot fall out of step
 //! with what actually runs.
 
-use crate::args::{Args, Spec};
+use std::sync::Arc;
+
+use leptos::prelude::{RwSignal, Set as _};
+
+use crate::args::{About, Args, Completes, Spec};
 use crate::commands::COMMANDS;
 use crate::fs;
 
@@ -32,6 +36,30 @@ impl Span {
 /// One line of output.
 pub type Line = Vec<Span>;
 
+/// Somewhere a command can put its output once it has some.
+///
+/// Handed to a [`Task`], and good for exactly one write. Copy, so a task can
+/// carry it into whatever callback eventually resolves.
+#[derive(Clone, Copy)]
+pub struct Sink(RwSignal<Output>);
+
+impl Sink {
+    pub const fn new(cell: RwSignal<Output>) -> Self {
+        Self(cell)
+    }
+
+    /// Replaces whatever the entry was showing. Calling this a second time
+    /// simply overwrites, which is what a command printing progress wants.
+    pub fn set(self, output: Output) {
+        self.0.set(output);
+    }
+}
+
+/// The work behind an [`Output::Pending`]. Run once, on the client, with
+/// somewhere to put the answer. Spawning is the task's own business: some have
+/// to await a response, and some only look asynchronous.
+pub type Task = Arc<dyn Fn(Sink) + Send + Sync>;
+
 /// What a command hands back to the terminal.
 #[derive(Clone)]
 pub enum Output {
@@ -40,12 +68,27 @@ pub enum Output {
     /// lays itself out. The count is left to CSS so it adapts to the viewport
     /// instead of assuming 80 columns.
     Columns(Vec<Line>),
+    /// Lines too wide to wrap, which scroll sideways in their own box. A grid
+    /// stops being a grid the moment it wraps.
+    Wide(Vec<Line>),
+    /// Nothing yet. The entry takes its place in the scrollback right away and
+    /// the task fills it in later, so the prompt comes back immediately rather
+    /// than the whole terminal waiting on a fetch.
+    Pending(Task),
     /// Empties the scrollback, banner and all, the way `clear` does.
     Clear,
+    /// Hands the terminal to a program, which takes the whole screen until it
+    /// is done.
+    Run(&'static crate::program::Listing),
     /// Ends the session: the shell prints its farewell and stops taking input,
     /// the way a closed ssh connection does.
     Exit,
     Nothing,
+}
+
+/// A command whose output arrives later.
+pub fn pending(task: impl Fn(Sink) + Send + Sync + 'static) -> Output {
+    Output::Pending(Arc::new(task))
 }
 
 /// Where the shell currently is, as segments below the root.
@@ -146,14 +189,63 @@ pub fn run(session: &mut Session, input: &str) -> Output {
     let args: Vec<&str> = parts.collect();
 
     let Some(command) = COMMANDS.iter().find(|command| command.name == name) else {
-        return error(format!("command not found: {name}"));
+        return launchable(session, name, &args);
     };
 
-    match crate::args::parse(command, &args) {
+    match crate::args::parse(command.about(), &args) {
         Ok(parsed) => (command.run)(session, &parsed),
         // Either the line was rejected or `-h` was asked for; both are already
         // formatted, so there is nothing left to decide here.
         Err(output) => output,
+    }
+}
+
+/// Resolves something that is not a builtin.
+///
+/// Only a path runs a program: `./bin/life` and `bin/life` both work, and a
+/// bare `life` does not. There is no `PATH` here, and inventing one would mean
+/// a name resolving to something the tree does not say is there.
+fn launchable(session: &Session, name: &str, args: &[&str]) -> Output {
+    let found = if name.contains('/') {
+        match fs::resolve(&session.cwd, name).and_then(|segments| fs::node_at(&segments)) {
+            Some(&fs::Node::Program(listing)) => Some(listing),
+            // It is there, it is just not something you can run. Saying only
+            // that it was not found would send someone looking for a typo.
+            Some(_) => {
+                return Output::Lines(vec![
+                    error_line(format!("command not found: {name}")),
+                    vec![Span::new(
+                        format!("{name} exists, but it is not a program."),
+                        "dim",
+                    )],
+                ]);
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
+
+    let Some(listing) = found else {
+        return error(format!("command not found: {name}"));
+    };
+
+    // Checked the same way a command's line is, so `life --help` answers and
+    // `life nonsense` is refused rather than quietly ignored.
+    match crate::args::parse(listing.about(), args) {
+        Ok(_) => Output::Run(listing),
+        Err(output) => output,
+    }
+}
+
+impl Command {
+    #[must_use]
+    pub const fn about(&self) -> About<'_> {
+        About {
+            name: self.name,
+            summary: self.summary,
+            spec: &self.spec,
+        }
     }
 }
 
@@ -184,15 +276,19 @@ pub fn complete(session: &Session, input: &str) -> Completion {
         .map_or(("", input), |space| input.split_at(space + 1));
 
     let candidates = if head.is_empty() {
+        // A command, or a path: running a program means typing a path to it,
+        // so the first word has to complete both. `bin/li` and `bi` are both
+        // on the way to the same thing.
         COMMANDS
             .iter()
             .map(|command| command.name.to_owned())
             .filter(|name| name.starts_with(word))
+            .chain(path_candidates(session, word, Completes::Paths))
             .collect::<Vec<_>>()
     } else if word.starts_with('-') {
         flag_candidates(head, word)
     } else {
-        path_candidates(session, word)
+        path_candidates(session, word, wanted(head))
     };
 
     let Some(prefix) = common_prefix(&candidates) else {
@@ -246,8 +342,21 @@ fn flag_candidates(head: &str, word: &str) -> Vec<String> {
     candidates
 }
 
+/// What the command at the head of the line can be given, so that `cd` is not
+/// offered files it cannot change into and `pwd` is not offered anything.
+fn wanted(head: &str) -> Completes {
+    head.split_whitespace()
+        .next()
+        .and_then(|name| COMMANDS.iter().find(|command| command.name == name))
+        .map_or(Completes::Paths, |command| command.spec.completes)
+}
+
 /// Completions for a partial path, relative to the working directory.
-fn path_candidates(session: &Session, word: &str) -> Vec<String> {
+fn path_candidates(session: &Session, word: &str, wanted: Completes) -> Vec<String> {
+    if wanted == Completes::Nothing {
+        return Vec::new();
+    }
+
     let (dir, stem) = word
         .rfind('/')
         .map_or(("", word), |slash| word.split_at(slash + 1));
@@ -262,6 +371,7 @@ fn path_candidates(session: &Session, word: &str) -> Vec<String> {
     node.entries()
         .iter()
         .filter(|entry| entry.name.starts_with(stem))
+        .filter(|entry| wanted != Completes::Dirs || matches!(entry.node, fs::Node::Dir(_)))
         .map(|entry| {
             let suffix = if matches!(entry.node, fs::Node::Dir(_)) {
                 "/"

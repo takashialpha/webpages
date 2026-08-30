@@ -8,3 +8,11 @@ target/
 
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
+
+# A local run writes the graffiti board beside the binary when
+# WALL_PATH is unset. It is state, not source.
+/wall.txt
+
+# Guest programs, built from bin/ by just into where the site
+# serves them. Build output, not source.
+/public/bin/

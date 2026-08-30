@@ -1,5 +1,8 @@
 // See lib.rs: deeply nested view-tree future types overflow the default depth in release.
 #![recursion_limit = "256"]
+// Stricter than the workspace, which only denies it: nothing in the server
+// needs unsafe, so nothing may reintroduce it.
+#![forbid(unsafe_code)]
 
 /// Installs the process-wide `tracing` subscriber, formatted for the journal
 /// that captures our stdout: color only when stdout is a terminal, and no
@@ -77,6 +80,77 @@ async fn log_request(
         "request",
     );
     response
+}
+
+/// The board is small, changes constantly, and is read by a command rather than
+/// a browser cache, so it must never be stored anywhere along the way.
+#[cfg(feature = "ssr")]
+const WALL_HEADERS: [(axum::http::HeaderName, &str); 2] = [
+    (
+        axum::http::header::CONTENT_TYPE,
+        "text/plain; charset=utf-8",
+    ),
+    (axum::http::header::CACHE_CONTROL, "no-store"),
+];
+
+/// Who is writing, for the rate limit.
+///
+/// Cloudflare sets `CF-Connecting-IP` and strips any copy the client sent, so
+/// behind the proxy this is trustworthy. It is only trustworthy there: anything
+/// reaching the origin directly could name whoever it liked, which is why the
+/// origin is not meant to be reachable directly.
+#[cfg(feature = "ssr")]
+fn writer(headers: &axum::http::HeaderMap) -> &str {
+    headers
+        .get("cf-connecting-ip")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("direct")
+}
+
+/// Handles one write to the board: validate, rate limit, apply, persist.
+#[cfg(feature = "ssr")]
+async fn write_cell(
+    wall: &webpages::wall::State,
+    headers: &axum::http::HeaderMap,
+    body: &str,
+) -> axum::response::Response {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse as _;
+
+    let Some((x, y, byte)) = webpages::wall::parse_write(body) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            WALL_HEADERS,
+            format!(
+                "expected `x y char`, with x under {}, y under {}, and one printable \
+                 character, or nothing to clear the cell\n",
+                webpages::wall::COLS,
+                webpages::wall::ROWS
+            ),
+        )
+            .into_response();
+    };
+
+    if !wall.allowed(writer(headers), 1) {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            WALL_HEADERS,
+            format!("slow down: {} cells a minute\n", webpages::wall::BUDGET),
+        )
+            .into_response();
+    }
+
+    // Written outside the lock, and only when something actually changed, so
+    // setting a cell to what it already held costs no disk at all.
+    if let Some(text) = wall.set(x, y, byte)
+        && let Err(error) = tokio::fs::write(wall.path(), &text).await
+    {
+        // The write still stands in memory, so the board is right until a
+        // restart. Saying so is more useful than failing the request.
+        tracing::error!(path = %wall.path().display(), %error, "could not persist the board");
+    }
+
+    (WALL_HEADERS, wall.render()).into_response()
 }
 
 /// Installs the termination handlers up front, so a failure to do so is a
@@ -195,6 +269,15 @@ async fn main() -> std::process::ExitCode {
     )
     .leak();
 
+    // The board outlives any one release, so it cannot live in the release
+    // directory: `deploy-webpages` swaps that out and would take the board with
+    // it. `WALL_PATH` points at somewhere durable, and systemd's
+    // `StateDirectory` is the natural place.
+    let wall = std::sync::Arc::new(webpages::wall::State::load(
+        std::env::var_os("WALL_PATH")
+            .map_or_else(|| std::path::PathBuf::from("wall.txt"), Into::into),
+    ));
+
     let listener = match TcpListener::bind(addr).await {
         Ok(listener) => listener,
         Err(error) => {
@@ -209,6 +292,7 @@ async fn main() -> std::process::ExitCode {
         build = webpages::BUILD,
         site_root = %leptos_options.site_root,
         site_pkg_dir = %leptos_options.site_pkg_dir,
+        wall = %wall.path().display(),
         "listening",
     );
 
@@ -223,6 +307,23 @@ async fn main() -> std::process::ExitCode {
                     ],
                     sitemap,
                 )
+            }),
+        )
+        .route(
+            "/api/wall",
+            get({
+                let wall = std::sync::Arc::clone(&wall);
+                move || {
+                    let wall = std::sync::Arc::clone(&wall);
+                    async move { (WALL_HEADERS, wall.render()) }
+                }
+            })
+            .post({
+                let wall = std::sync::Arc::clone(&wall);
+                move |headers: axum::http::HeaderMap, body: String| {
+                    let wall = std::sync::Arc::clone(&wall);
+                    async move { write_cell(&wall, &headers, &body).await }
+                }
             }),
         )
         .route(

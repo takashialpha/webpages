@@ -5,11 +5,14 @@
 //! [`Spec`] on the entry is checked before the function runs, so a command body
 //! only ever sees arguments it declared.
 
-use crate::args::{Args, Flag, Spec, usage};
+use crate::args::{Args, Completes, Flag, Spec, usage};
 use crate::clock;
-use crate::fs::{self, Node};
-use crate::shell::{Command, Line, Output, Session, Span, body_lines, error, error_line, line};
+use crate::fs::{self, Live, Node};
+use crate::shell::{
+    Command, Line, Output, Session, Span, body_lines, error, error_line, line, pending,
+};
 use crate::theme;
+use crate::wall;
 
 /// Options are kept to the ones that mean something here. `ls -l` is absent on
 /// purpose: its columns are mode, owner, group, and mtime, and this tree has
@@ -37,7 +40,13 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "help",
         summary: "list the commands",
-        spec: Spec::one("command"),
+        spec: Spec {
+            flags: &[],
+            min: 0,
+            max: Some(1),
+            operand: "command",
+            completes: Completes::Nothing,
+        },
         run: help,
     },
     Command {
@@ -48,13 +57,14 @@ pub const COMMANDS: &[Command] = &[
             min: 0,
             max: None,
             operand: "path",
+            completes: Completes::Paths,
         },
         run: ls,
     },
     Command {
         name: "cd",
         summary: "change directory",
-        spec: Spec::one("path"),
+        spec: Spec::dir("path"),
         run: cd,
     },
     Command {
@@ -65,6 +75,7 @@ pub const COMMANDS: &[Command] = &[
             min: 1,
             max: None,
             operand: "file",
+            completes: Completes::Paths,
         },
         run: cat,
     },
@@ -93,9 +104,27 @@ pub const COMMANDS: &[Command] = &[
         run: uptime,
     },
     Command {
+        name: "wall",
+        summary: "read and write the shared board",
+        spec: Spec {
+            flags: &[],
+            min: 0,
+            max: Some(3),
+            operand: "x y char",
+            completes: Completes::Nothing,
+        },
+        run: graffiti,
+    },
+    Command {
         name: "theme",
         summary: "switch the palette",
-        spec: Spec::one("name"),
+        spec: Spec {
+            flags: &[],
+            min: 0,
+            max: Some(1),
+            operand: "name",
+            completes: Completes::Nothing,
+        },
         run: set_theme,
     },
     Command {
@@ -117,7 +146,10 @@ fn help(_session: &mut Session, args: &Args<'_>) -> Output {
         return COMMANDS
             .iter()
             .find(|command| command.name == name)
-            .map_or_else(|| error(format!("help: no such command: {name}")), usage);
+            .map_or_else(
+                || error(format!("help: no such command: {name}")),
+                |command| usage(command.about()),
+            );
     }
 
     let width = COMMANDS
@@ -139,7 +171,7 @@ fn help(_session: &mut Session, args: &Args<'_>) -> Output {
         "dim",
     )]);
     lines.push(vec![Span::new(
-        "everything else is a file. run `ls` to look around.",
+        "`ls` and `cd` to look around. `bin/` holds programs.",
         "dim",
     )]);
     Output::Lines(lines)
@@ -162,8 +194,12 @@ fn ls(session: &mut Session, args: &Args<'_>) -> Output {
             None => missing.push(error_line(format!(
                 "ls: {target}: No such file or directory"
             ))),
-            // Naming a file lists the file, the way `ls` itself does.
-            Some(Node::File(_)) => files.push(vec![Span::plain(*target)]),
+            // Naming a file lists the file, the way `ls` itself does. A live
+            // file is still a file: listing it says its name, and reading it is
+            // `cat`'s job.
+            Some(Node::File(_) | Node::Live(_) | Node::Program(_)) => {
+                files.push(vec![Span::plain(*target)]);
+            }
             Some(node) => dirs.push((target, node)),
         }
     }
@@ -206,7 +242,10 @@ fn entry_lines(node: &Node, all: bool) -> Vec<Line> {
     }
     lines.extend(node.entries().iter().map(|entry| match entry.node {
         Node::Dir(_) => vec![Span::new(format!("{}/", entry.name), "dir")],
-        Node::File(_) => vec![Span::plain(entry.name)],
+        // Runnable, so it is coloured the way `ls` colours anything you can
+        // run rather than read.
+        Node::Program(_) => vec![Span::new(entry.name, "accent")],
+        Node::File(_) | Node::Live(_) => vec![Span::plain(entry.name)],
     }));
     lines
 }
@@ -230,36 +269,102 @@ fn cd(session: &mut Session, args: &Args<'_>) -> Output {
             session.prev = std::mem::replace(&mut session.cwd, segments);
             Output::Nothing
         }
-        Some(Node::File(_)) => error(format!("cd: {target}: Not a directory")),
+        Some(Node::File(_) | Node::Live(_) | Node::Program(_)) => {
+            error(format!("cd: {target}: Not a directory"))
+        }
         None => error(format!("cd: {target}: No such file or directory")),
     }
 }
 
-fn cat(session: &mut Session, args: &Args<'_>) -> Output {
-    let mut lines: Vec<Line> = Vec::new();
-    // Numbering runs across the whole output rather than restarting per file,
-    // which is what `cat -n` on several files does.
-    let mut numbered = 0_usize;
+/// One operand of a `cat`, resolved but not yet rendered.
+///
+/// Kept as a plan rather than rendered as it goes, because a live file cannot
+/// be read without asking the server, and the operands after it still have to
+/// come out in the order they were given.
+enum Piece {
+    Text(&'static str),
+    Live(Live),
+    Failed(Line),
+}
 
-    for target in args.operands() {
-        match fs::resolve(&session.cwd, target).and_then(|segments| fs::node_at(&segments)) {
-            Some(Node::File(text)) => {
-                for mut line in body_lines(text) {
-                    if args.has('n') {
-                        numbered += 1;
-                        line.insert(0, Span::new(format!("{numbered:>6}  "), "dim"));
-                    }
-                    lines.push(line);
+fn cat(session: &mut Session, args: &Args<'_>) -> Output {
+    let numbered = args.has('n');
+    let plan: Vec<Piece> = args
+        .operands()
+        .iter()
+        .map(|target| {
+            match fs::resolve(&session.cwd, target).and_then(|segments| fs::node_at(&segments)) {
+                Some(Node::File(text)) => Piece::Text(text),
+                Some(&Node::Live(live)) => Piece::Live(live),
+                Some(Node::Dir(_)) => {
+                    Piece::Failed(error_line(format!("cat: {target}: Is a directory")))
                 }
+                // Not text, so there is nothing to print. What it is instead
+                // is `ls`'s business, not `cat`'s.
+                Some(Node::Program(_)) => {
+                    Piece::Failed(error_line(format!("cat: {target}: is a binary file")))
+                }
+                None => Piece::Failed(error_line(format!(
+                    "cat: {target}: No such file or directory"
+                ))),
             }
-            Some(Node::Dir(_)) => lines.push(error_line(format!("cat: {target}: Is a directory"))),
-            None => lines.push(error_line(format!(
-                "cat: {target}: No such file or directory"
-            ))),
-        }
+        })
+        .collect();
+
+    if !plan.iter().any(|piece| matches!(*piece, Piece::Live(_))) {
+        return Output::Lines(spell(&plan, "", numbered));
     }
 
-    Output::Lines(lines)
+    // Something in there has to be fetched, so the whole thing answers later.
+    // The board is the only live file, so one request covers however many times
+    // it was named.
+    pending(move |sink| {
+        let plan: Vec<Piece> = plan.iter().map(Piece::clone_ref).collect();
+        leptos::task::spawn_local(async move {
+            sink.set(match wall::fetch(None).await {
+                Ok((200, board)) => Output::Wide(spell(&plan, &board, numbered)),
+                Ok((_, complaint)) => error(format!("cat: {}", complaint.trim())),
+                Err(problem) => error(problem.replace("wall:", "cat:")),
+            });
+        });
+    })
+}
+
+impl Piece {
+    /// Cheap enough to copy: the text is `'static` and a failure is a line.
+    fn clone_ref(&self) -> Self {
+        match *self {
+            Self::Text(text) => Self::Text(text),
+            Self::Live(live) => Self::Live(live),
+            Self::Failed(ref line) => Self::Failed(line.clone()),
+        }
+    }
+}
+
+/// Renders a resolved plan, numbering across the whole of it rather than
+/// restarting per file, which is what `cat -n` on several files does.
+fn spell(plan: &[Piece], board: &str, numbered: bool) -> Vec<Line> {
+    let mut lines: Vec<Line> = Vec::new();
+    let mut count = 0_usize;
+
+    for piece in plan {
+        let body = match *piece {
+            Piece::Text(text) => body_lines(text),
+            // Raw, the way `cat` reads any other file. The frame and the axes
+            // belong to `wall`, which is the thing that draws it.
+            Piece::Live(Live::Wall) => board.lines().map(|row| vec![Span::plain(row)]).collect(),
+            Piece::Failed(ref line) => vec![line.clone()],
+        };
+
+        for mut line in body {
+            if numbered {
+                count += 1;
+                line.insert(0, Span::new(format!("{count:>6}  "), "dim"));
+            }
+            lines.push(line);
+        }
+    }
+    lines
 }
 
 fn pwd(session: &mut Session, _args: &Args<'_>) -> Output {
@@ -301,6 +406,107 @@ fn set_theme(_session: &mut Session, args: &Args<'_>) -> Output {
         |palette| line(format!("theme set to {}", palette.name)),
     )
 }
+
+/// `wall` reads the board, `wall <x> <y> <char>` writes one cell of it.
+///
+/// Both answer later, because both are a request to the server. The entry is
+/// already in the scrollback by then and the prompt never waits.
+fn graffiti(_session: &mut Session, args: &Args<'_>) -> Output {
+    let write = match *args.operands() {
+        [] => None,
+        // Coordinates and nothing else clears the cell. The line was split on
+        // whitespace before it got here, so a space cannot arrive as an
+        // argument, and leaving it out is the way to ask for one.
+        [x, y] => Some(format!("{x} {y}")),
+        [x, y, cell] => Some(format!("{x} {y} {cell}")),
+        [..] => {
+            return error("wall: one character at a time. `wall <x> <y> [char]`");
+        }
+    };
+
+    pending(move |sink| {
+        let write = write.clone();
+        leptos::task::spawn_local(async move {
+            sink.set(match wall::fetch(write.as_deref()).await {
+                Ok((200, board)) => board_lines(&board),
+                // The server explains a refusal in one sentence, and that
+                // sentence is more use than the status code it came with.
+                Ok((_, complaint)) => error(format!("wall: {}", complaint.trim())),
+                Err(problem) => error(problem),
+            });
+        });
+    })
+}
+
+/// The board in a frame, with its axes outside it.
+///
+/// Addressed the way it is drawn: `0,0` is the bottom left corner and `y`
+/// counts upwards, so it reads as the first quadrant of a graph rather than as
+/// lines of a document.
+///
+/// The frame is drawn in the box-drawing characters the VGA ROM font actually
+/// carries, the same ones a bios screen is built from, rather than in `+` and
+/// `-`. Its width is where the stylesheet's 85 column measure comes from.
+fn board_lines(board: &str) -> Output {
+    // Indexed rather than computed, so there is no integer cast in sight.
+    const DIGITS: &[u8; 10] = b"0123456789";
+    let digit = |n: usize| char::from(DIGITS[n % 10]);
+
+    let gutter = " ".repeat(GUTTER);
+    let rule = "─".repeat(wall::COLS);
+
+    let mut lines: Vec<Line> = vec![vec![Span::new(format!("{gutter}┌{rule}┐"), "dim")]];
+
+    // The server sends the board top row first, which is already the order it
+    // is drawn in; only the number beside each row is counted the other way,
+    // because the bottom row is row zero.
+    lines.extend(
+        board
+            .lines()
+            .take(wall::ROWS)
+            .enumerate()
+            .map(|(index, row)| {
+                vec![
+                    Span::new(
+                        format!("{:>width$} ", wall::ROWS - 1 - index, width = GUTTER - 1),
+                        "dim",
+                    ),
+                    Span::new("│", "dim"),
+                    Span::new(format!("{row:width$}", width = wall::COLS), "accent"),
+                    Span::new("│", "dim"),
+                ]
+            }),
+    );
+
+    lines.push(vec![Span::new(format!("{gutter}└{rule}┘"), "dim")]);
+
+    // The x axis sits under the frame, indented past the border so a column
+    // lines up with the cell above it. Tens below units, so a number is read
+    // upwards out of the two rows.
+    let axis = format!("{gutter} ");
+    let units: String = (0..wall::COLS).map(digit).collect();
+    let tens: String = (0..wall::COLS)
+        .map(|x| if x % 10 == 0 { digit(x / 10) } else { ' ' })
+        .collect();
+    lines.push(vec![Span::new(format!("{axis}{units}"), "dim")]);
+    lines.push(vec![Span::new(format!("{axis}{tens}"), "dim")]);
+
+    // Kept inside the frame's own width: this line shares the box that scrolls
+    // sideways, so a longer one would make the whole board scroll to read it.
+    lines.push(vec![]);
+    lines.push(vec![Span::new(
+        format!(
+            "{}x{}, 0,0 bottom left. `wall <x> <y> <char>` sets a cell; omit char to clear.",
+            wall::COLS,
+            wall::ROWS
+        ),
+        "dim",
+    )]);
+    Output::Wide(lines)
+}
+
+/// Width of the row-number column, including the space after it.
+const GUTTER: usize = 3;
 
 fn date(_session: &mut Session, _args: &Args<'_>) -> Output {
     line(clock::format_utc(clock::now_millis()))

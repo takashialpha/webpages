@@ -34,6 +34,25 @@
   --dir: #5555ff;
   --err: #ff5555;
   --link: #55ffff;
+
+  /* The sixteen colours a program draws with, in the order every terminal
+     numbers them. These are the vga hardware palette. */
+  --c0: #000000;
+  --c1: #aa0000;
+  --c2: #00aa00;
+  --c3: #aa5500;
+  --c4: #0000aa;
+  --c5: #aa00aa;
+  --c6: #00aaaa;
+  --c7: #aaaaaa;
+  --c8: #555555;
+  --c9: #ff5555;
+  --c10: #55ff55;
+  --c11: #ffff55;
+  --c12: #5555ff;
+  --c13: #ff55ff;
+  --c14: #55ffff;
+  --c15: #ffffff;
 }
 
 :root[data-theme="mocha"] {
@@ -45,6 +64,23 @@
   --dir: #89b4fa;
   --err: #f38ba8;
   --link: #94e2d5;
+
+  --c0: #45475a;
+  --c1: #f38ba8;
+  --c2: #a6e3a1;
+  --c3: #f9e2af;
+  --c4: #89b4fa;
+  --c5: #f5c2e7;
+  --c6: #94e2d5;
+  --c7: #bac2de;
+  --c8: #585b70;
+  --c9: #f38ba8;
+  --c10: #a6e3a1;
+  --c11: #f9e2af;
+  --c12: #89b4fa;
+  --c13: #f5c2e7;
+  --c14: #94e2d5;
+  --c15: #a6adc8;
 }
 
 :root[data-theme="gruvbox"] {
@@ -56,6 +92,23 @@
   --dir: #83a598;
   --err: #fb4934;
   --link: #8ec07c;
+
+  --c0: #282828;
+  --c1: #cc241d;
+  --c2: #98971a;
+  --c3: #d79921;
+  --c4: #458588;
+  --c5: #b16286;
+  --c6: #689d6a;
+  --c7: #a89984;
+  --c8: #928374;
+  --c9: #fb4934;
+  --c10: #b8bb26;
+  --c11: #fabd2f;
+  --c12: #83a598;
+  --c13: #d3869b;
+  --c14: #8ec07c;
+  --c15: #ebdbb2;
 }
 
 /* ── frame ──────────────────────────────────────────────────────────────── */
@@ -87,6 +140,13 @@ body {
   font-family: "VGA", ui-monospace, monospace;
   /* One cell. Also the floor below which ios zooms a focused input. */
   font-size: 16px;
+  /* The cell, as an exact number of pixels.
+     Not `ch`: that unit comes from a metric the woff2 conversion rounded, and
+     measures 15.9998px where every glyph actually advances 16. Laying anything
+     out on it puts text on fractional pixels, which rasterises differently
+     from the same text on whole ones, and the difference is visible. The
+     bitmap is 8 by 16, so the cell is always half the type size. */
+  --cell: 8px;
   /* The cell is exactly one em tall, so a console has no leading. */
   line-height: 1;
   -webkit-text-size-adjust: 100%;
@@ -99,6 +159,7 @@ body {
        real console runs at. 20px would be blurry: the bitmap only divides by
        16. */
     font-size: 32px;
+    --cell: 16px;
   }
 }
 
@@ -141,8 +202,13 @@ body {
   scrollbar-width: none;
   padding: 12px;
   /* A console fills from the top and only reaches the bottom once it has
-     scrolled, so nothing pins the prompt down there. */
-  max-width: 84ch;
+     scrolled, so nothing pins the prompt down there.
+
+     The padding is added on rather than included: `box-sizing: border-box`
+     otherwise takes it out of the character count, and the last column ends up
+     sliced down the middle. 85 is what the framed board needs, being its 80
+     columns, a border either side, and the row numbers up the left. */
+  max-width: calc(85 * var(--cell) + 24px);
 }
 
 .screen::-webkit-scrollbar {
@@ -161,14 +227,106 @@ body {
   display: none;
 }
 
+/* Out of sight, but still there to be focused. The input inside the scrollback
+   is the terminal's keyboard, and an element that is `display: none` cannot
+   hold focus, so hiding the scrollback that way while a program runs would
+   quietly stop the program receiving keys. */
+.stashed {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  /* Zeroed, or the padding alone would keep the box its own size: under
+     `border-box` a height smaller than the padding is simply ignored. */
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Output too wide for the screen, which is the graffiti board on a phone: it
+   scrolls sideways in its own box rather than wrapping, because a wrapped grid
+   is not a grid any more. */
+.wide {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.wide::-webkit-scrollbar {
+  display: none;
+}
+
+.wide .line {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
 /* `ls` output. Auto-fill rather than a fixed count, so it columns on a wide
    screen and collapses to one column on a phone, which is what a terminal does
    when it runs out of width. */
 .cols {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(20ch, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(20 * var(--cell)), 1fr));
   column-gap: 2ch;
 }
+
+/* ── the alternate screen ───────────────────────────────────────────────────
+   A program takes the whole terminal and draws into a grid of cells. It sits
+   over the scrollback rather than replacing it, so leaving puts everything
+   back exactly as it was, the way `vim` exiting does not eat your history.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.alt {
+  flex: 1 1 auto;
+  overflow: hidden;
+  /* No wrapping and no selection: this is a screen, not a document. Every row
+     is exactly as wide as the grid, and a wrapped row would push the rest of
+     the picture down. */
+  white-space: pre;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.alt .row {
+  margin: 0;
+  min-height: 1em;
+}
+
+/* One class per colour rather than an inline style, so a repaint changes the
+   text of a run and never its attributes. */
+.f0 { color: var(--c0); }
+.f1 { color: var(--c1); }
+.f2 { color: var(--c2); }
+.f3 { color: var(--c3); }
+.f4 { color: var(--c4); }
+.f5 { color: var(--c5); }
+.f6 { color: var(--c6); }
+.f7 { color: var(--c7); }
+.f8 { color: var(--c8); }
+.f9 { color: var(--c9); }
+.f10 { color: var(--c10); }
+.f11 { color: var(--c11); }
+.f12 { color: var(--c12); }
+.f13 { color: var(--c13); }
+.f14 { color: var(--c14); }
+.f15 { color: var(--c15); }
+
+.b0 { background: var(--c0); }
+.b1 { background: var(--c1); }
+.b2 { background: var(--c2); }
+.b3 { background: var(--c3); }
+.b4 { background: var(--c4); }
+.b5 { background: var(--c5); }
+.b6 { background: var(--c6); }
+.b7 { background: var(--c7); }
+.b8 { background: var(--c8); }
+.b9 { background: var(--c9); }
+.b10 { background: var(--c10); }
+.b11 { background: var(--c11); }
+.b12 { background: var(--c12); }
+.b13 { background: var(--c13); }
+.b14 { background: var(--c14); }
+.b15 { background: var(--c15); }
 
 /* ── output ─────────────────────────────────────────────────────────────── */
 
@@ -218,15 +376,37 @@ a:focus-visible,
   display: flex;
   align-items: baseline;
   /* The literal space between the prompt and the input would be collapsed by
-     flex layout, so the gap supplies it. */
-  gap: 1ch;
+     flex layout, so the gap supplies it. One cell exactly, so the input starts
+     on the same pixel the echoed line's text will. */
+  gap: var(--cell);
 }
 
-/* Holds the input and the cursor drawn over it. */
+/* Holds the input, the text drawn over it, and the cursor. */
 .field {
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
+  /* The mirrored text is as long as the line, so it has to be cut off at the
+     field rather than running on past the edge of the screen. */
+  overflow: hidden;
+}
+
+/* The typed text, overlaid on the input that is really holding it. Laid out
+   exactly as the echoed line lays out the same characters, because it is the
+   same kind of element with the same rules. */
+.field .typed {
+  position: absolute;
+  top: 0;
+  white-space: pre;
+  /* Clicks belong to the input underneath, which is what puts the caret where
+     you pointed. */
+  pointer-events: none;
+}
+
+/* What was typed, echoed into the scrollback. Shares the input's colour so a
+   line does not dim the instant it is run. */
+.typed {
+  color: var(--bright);
 }
 
 .stdin {
@@ -235,15 +415,23 @@ a:focus-visible,
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--bright);
+  /* The input holds the text and takes the keys, but does not draw it: the
+     span over it does. Transparent rather than hidden, so the selection it
+     draws still shows, behind those glyphs. */
+  color: transparent;
   font: inherit;
   /* The real caret is a thin bar. A console blinks an underscore, so the native
      one is hidden and `.cursor` is drawn instead. */
   caret-color: transparent;
+  /* One cell of room at the end. A line longer than the field scrolls so the
+     caret sits against the right edge, and the block cursor drawn there is a
+     whole cell wide: without this it hangs off the end and is clipped. */
+  padding-right: var(--cell);
 }
 
-/* Placed by column rather than measured: the font is fixed width, so `1ch` is
-   exactly one cell and the cursor stays correct after an arrow key. */
+/* Placed by column rather than measured: the font is fixed width, so the
+   column times the cell is exactly where the caret is, and stays right after an
+   arrow key. */
 .cursor {
   position: absolute;
   top: 0;

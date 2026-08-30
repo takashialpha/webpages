@@ -11,10 +11,22 @@ pub struct Entry {
     pub node: Node,
 }
 
-/// Either a directory of further entries, or a file's text.
+/// A file whose contents are not in the binary, because they change while you
+/// are looking at them. Reading one is a request, so a command that meets it
+/// has to answer later.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Live {
+    /// The shared board. See `wall.rs`.
+    Wall,
+}
+
+/// A directory of further entries, a file's text, a file the server holds, or
+/// something that can be run.
 pub enum Node {
     Dir(&'static [Entry]),
     File(&'static str),
+    Live(Live),
+    Program(&'static crate::program::Listing),
 }
 
 impl Node {
@@ -26,7 +38,7 @@ impl Node {
                 .iter()
                 .find(|entry| entry.name == name)
                 .map(|entry| &entry.node),
-            Self::File(_) => None,
+            Self::File(_) | Self::Live(_) | Self::Program(_) => None,
         }
     }
 
@@ -35,7 +47,7 @@ impl Node {
     pub const fn entries(&self) -> &'static [Entry] {
         match *self {
             Self::Dir(entries) => entries,
-            Self::File(_) => &[],
+            Self::File(_) | Self::Live(_) | Self::Program(_) => &[],
         }
     }
 }
@@ -44,74 +56,106 @@ impl Node {
 /// the meta description. Splitting it out here means the intro is written once.
 #[must_use]
 pub fn intro() -> &'static str {
-    const ABOUT: &str = include_str!("../content/about.txt");
+    const ABOUT: &str = include_str!("../content/documents/about.txt");
     ABOUT.split("\n\n").next().unwrap_or(ABOUT).trim_end()
 }
 
 pub const ROOT: Node = Node::Dir(&[
+    // Programs, where a unix home directory has always put them.
     Entry {
-        name: "about.txt",
-        node: Node::File(include_str!("../content/about.txt")),
+        name: "bin",
+        node: Node::Dir(crate::program::BIN),
     },
+    // A home directory, laid out like one. The writing is together, the
+    // projects are together, and the one thing that changes while you are
+    // looking at it is kept apart from the things that do not.
     Entry {
-        name: "rust.txt",
-        node: Node::File(include_str!("../content/rust.txt")),
-    },
-    Entry {
-        name: "linux.txt",
-        node: Node::File(include_str!("../content/linux.txt")),
-    },
-    Entry {
-        name: "infra.txt",
-        node: Node::File(include_str!("../content/infra.txt")),
-    },
-    Entry {
-        name: "design.txt",
-        node: Node::File(include_str!("../content/design.txt")),
-    },
-    Entry {
-        name: "now.txt",
-        node: Node::File(include_str!("../content/now.txt")),
-    },
-    Entry {
-        name: "contact.txt",
-        node: Node::File(include_str!("../content/contact.txt")),
+        name: "documents",
+        node: Node::Dir(&[
+            Entry {
+                name: "about.txt",
+                node: Node::File(include_str!("../content/documents/about.txt")),
+            },
+            Entry {
+                name: "rust.txt",
+                node: Node::File(include_str!("../content/documents/rust.txt")),
+            },
+            Entry {
+                name: "linux.txt",
+                node: Node::File(include_str!("../content/documents/linux.txt")),
+            },
+            Entry {
+                name: "infra.txt",
+                node: Node::File(include_str!("../content/documents/infra.txt")),
+            },
+            Entry {
+                name: "design.txt",
+                node: Node::File(include_str!("../content/documents/design.txt")),
+            },
+            Entry {
+                name: "now.txt",
+                node: Node::File(include_str!("../content/documents/now.txt")),
+            },
+            Entry {
+                name: "contact.txt",
+                node: Node::File(include_str!("../content/documents/contact.txt")),
+            },
+        ]),
     },
     Entry {
         name: "projects",
         node: Node::Dir(&[
             Entry {
-                name: "audium",
-                node: Node::File(include_str!("../content/projects/audium")),
+                name: "audium.txt",
+                node: Node::File(include_str!("../content/projects/audium.txt")),
             },
             Entry {
-                name: "swagsh",
-                node: Node::File(include_str!("../content/projects/swagsh")),
+                name: "swagsh.txt",
+                node: Node::File(include_str!("../content/projects/swagsh.txt")),
             },
             Entry {
-                name: "carboxyl",
-                node: Node::File(include_str!("../content/projects/carboxyl")),
+                name: "carboxyl.txt",
+                node: Node::File(include_str!("../content/projects/carboxyl.txt")),
             },
             Entry {
-                name: "webpages",
-                node: Node::File(include_str!("../content/projects/webpages")),
+                name: "webpages.txt",
+                node: Node::File(include_str!("../content/projects/webpages.txt")),
             },
             Entry {
-                name: "niri-takashialpha",
-                node: Node::File(include_str!("../content/projects/niri-takashialpha")),
+                name: "niri-takashialpha.txt",
+                node: Node::File(include_str!("../content/projects/niri-takashialpha.txt")),
             },
         ]),
     },
+    // Mutable state, which is what `var` has always meant. The only file here
+    // that anyone can write to, and the only one whose contents come from the
+    // server rather than from this binary.
+    Entry {
+        name: "var",
+        node: Node::Dir(&[Entry {
+            name: "wall.txt",
+            node: Node::Live(Live::Wall),
+        }]),
+    },
 ]);
 
-/// Resolves a path against a working directory, handling `.`, `..`, a leading
-/// `/` or `~`, and rejecting anything that walks past the root.
+/// Resolves a path against a working directory, handling `.`, `..` and a
+/// leading `~`, and rejecting anything that walks past the top.
+///
+/// A leading `/` does not resolve. This tree is a home directory and nothing
+/// else: there is no root above it, so a path claiming to start at one is
+/// naming something that is not here, and saying so is more honest than
+/// quietly treating `/` and `~` as the same place.
 ///
 /// Returns the resolved segments, which the caller can turn back into a node
 /// with [`node_at`].
 #[must_use]
 pub fn resolve(cwd: &[&'static str], path: &str) -> Option<Vec<&'static str>> {
-    let mut segments = if path.starts_with('/') || path.starts_with('~') {
+    if path.starts_with('/') {
+        return None;
+    }
+
+    let mut segments = if path.starts_with('~') {
         Vec::new()
     } else {
         cwd.to_vec()

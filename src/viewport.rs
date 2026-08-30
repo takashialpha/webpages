@@ -64,3 +64,56 @@ pub fn track(on_change: impl Fn() + 'static) {
 /// into the server build alongside the rest.
 #[cfg(not(feature = "hydrate"))]
 pub fn track(_on_change: impl Fn() + 'static) {}
+
+/// How wide and tall one character cell is, in pixels.
+///
+/// Measured rather than assumed. The font is a bitmap that is only crisp at
+/// multiples of its own size, and the stylesheet switches between two of them
+/// at a breakpoint, so the only honest way to know the cell is to ask what a
+/// character actually came out as.
+#[cfg(feature = "hydrate")]
+#[must_use]
+pub fn cell_size() -> (f64, f64) {
+    use wasm_bindgen::JsCast as _;
+
+    // A run of them rather than one, so the width divides out whatever
+    // rounding the browser does on a single glyph.
+    const RUN: usize = 100;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "one hundred is exact in a double"
+    )]
+    const RUN_F: f64 = RUN as f64;
+
+    let document = leptos::prelude::document();
+    let Ok(probe) = document.create_element("span") else {
+        return (0.0, 0.0);
+    };
+    let Some(body) = document.body() else {
+        return (0.0, 0.0);
+    };
+
+    probe.set_text_content(Some(&"x".repeat(RUN)));
+    let _ = probe.set_attribute(
+        "style",
+        "position:absolute;visibility:hidden;white-space:pre;top:0;left:0",
+    );
+    if body.append_child(&probe).is_err() {
+        return (0.0, 0.0);
+    }
+
+    let size = probe.unchecked_ref::<web_sys::HtmlElement>();
+    let cell = (
+        f64::from(size.offset_width()) / RUN_F,
+        f64::from(size.offset_height()),
+    );
+    let _ = body.remove_child(&probe);
+    cell
+}
+
+/// The server draws no cells.
+#[cfg(not(feature = "hydrate"))]
+#[must_use]
+pub const fn cell_size() -> (f64, f64) {
+    (0.0, 0.0)
+}

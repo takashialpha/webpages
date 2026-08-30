@@ -9,7 +9,19 @@
 //! The spec is also what `help` and tab completion read, so usage text and flag
 //! completion are generated from the thing that actually runs.
 
-use crate::shell::{Command, Line, Output, Span, error_line};
+use crate::shell::{Line, Output, Span, error_line};
+
+/// The three things needed to check a line and explain it: what it is called,
+/// what it does, and what it takes.
+///
+/// Commands and programs are different kinds of thing, but they are typed the
+/// same way, so they are refused and explained the same way too.
+#[derive(Clone, Copy)]
+pub struct About<'a> {
+    pub name: &'a str,
+    pub summary: &'a str,
+    pub spec: &'a Spec,
+}
 
 /// One option a command accepts. Options are boolean; nothing here takes a
 /// value, so there is no `--name=value` form to parse.
@@ -21,6 +33,16 @@ pub struct Flag {
     pub help: &'static str,
 }
 
+/// What Tab offers after a command, which is not the same for all of them: a
+/// command that can only be given a directory should not offer files, and one
+/// that takes nothing at all should offer nothing.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Completes {
+    Paths,
+    Dirs,
+    Nothing,
+}
+
 /// What a command accepts: its options, and how many operands.
 pub struct Spec {
     pub flags: &'static [Flag],
@@ -30,6 +52,8 @@ pub struct Spec {
     pub max: Option<usize>,
     /// What one operand is called, in usage text and in errors.
     pub operand: &'static str,
+    /// What its operands can be, which is what Tab offers.
+    pub completes: Completes,
 }
 
 impl Spec {
@@ -39,15 +63,28 @@ impl Spec {
         min: 0,
         max: Some(0),
         operand: "",
+        completes: Completes::Nothing,
     };
 
-    /// A command that takes no options and one optional operand.
+    /// A command that takes no options and one optional path.
     pub const fn one(operand: &'static str) -> Self {
         Self {
             flags: &[],
             min: 0,
             max: Some(1),
             operand,
+            completes: Completes::Paths,
+        }
+    }
+
+    /// The same, for a command that can only be given a directory.
+    pub const fn dir(operand: &'static str) -> Self {
+        Self {
+            flags: &[],
+            min: 0,
+            max: Some(1),
+            operand,
+            completes: Completes::Dirs,
         }
     }
 }
@@ -86,8 +123,8 @@ impl<'a> Args<'a> {
 ///
 /// Returns what the shell should print instead of running the command: the
 /// usage text when `-h` or `--help` was asked for, and an error otherwise.
-pub fn parse<'a>(command: &Command, argv: &[&'a str]) -> Result<Args<'a>, Output> {
-    let spec = &command.spec;
+pub fn parse<'a>(about: About<'_>, argv: &[&'a str]) -> Result<Args<'a>, Output> {
+    let spec = about.spec;
     let mut shorts = Vec::new();
     let mut operands = Vec::new();
     let mut ended = false;
@@ -99,19 +136,19 @@ pub fn parse<'a>(command: &Command, argv: &[&'a str]) -> Result<Args<'a>, Output
             ended = true;
         } else if let Some(long) = arg.strip_prefix("--") {
             if long == "help" {
-                return Err(usage(command));
+                return Err(usage(about));
             }
             let Some(flag) = spec.flags.iter().find(|flag| flag.long == Some(long)) else {
-                return Err(fail(command, &format!("unrecognized option '--{long}'")));
+                return Err(fail(about, &format!("unrecognized option '--{long}'")));
             };
             shorts.push(flag.short);
         } else if let Some(cluster) = arg.strip_prefix('-') {
             for short in cluster.chars() {
                 if short == 'h' {
-                    return Err(usage(command));
+                    return Err(usage(about));
                 }
                 let Some(flag) = spec.flags.iter().find(|flag| flag.short == short) else {
-                    return Err(fail(command, &format!("invalid option -- '{short}'")));
+                    return Err(fail(about, &format!("invalid option -- '{short}'")));
                 };
                 shorts.push(flag.short);
             }
@@ -121,18 +158,18 @@ pub fn parse<'a>(command: &Command, argv: &[&'a str]) -> Result<Args<'a>, Output
     }
 
     if operands.len() < spec.min {
-        return Err(fail(command, "missing operand"));
+        return Err(fail(about, "missing operand"));
     }
     if spec.max.is_some_and(|max| operands.len() > max) {
-        return Err(fail(command, "too many arguments"));
+        return Err(fail(about, "too many arguments"));
     }
 
     Ok(Args { shorts, operands })
 }
 
 /// The usage line, built from the spec rather than written out beside it.
-pub fn usage_line(command: &Command) -> String {
-    let spec = &command.spec;
+pub fn usage_line(about: About<'_>) -> String {
+    let spec = about.spec;
 
     let flags = if spec.flags.is_empty() {
         String::new()
@@ -151,25 +188,25 @@ pub fn usage_line(command: &Command) -> String {
         (_, None) => format!(" <{}...>", spec.operand),
     };
 
-    format!("usage: {}{flags}{operands}", command.name)
+    format!("usage: {}{flags}{operands}", about.name)
 }
 
 /// What `-h` and `help <command>` both print.
-pub fn usage(command: &Command) -> Output {
+pub fn usage(about: About<'_>) -> Output {
     let mut lines: Vec<Line> = vec![
-        vec![Span::plain(usage_line(command))],
+        vec![Span::plain(usage_line(about))],
         vec![],
-        vec![Span::plain(format!("  {}", command.summary))],
+        vec![Span::plain(format!("  {}", about.summary))],
     ];
 
-    if !command.spec.flags.is_empty() {
-        let names: Vec<String> = command.spec.flags.iter().map(flag_names).collect();
+    if !about.spec.flags.is_empty() {
+        let names: Vec<String> = about.spec.flags.iter().map(flag_names).collect();
         let width = names.iter().map(String::len).max().unwrap_or(0);
 
         lines.push(vec![]);
         lines.push(vec![Span::new("options", "dim")]);
         lines.push(vec![]);
-        lines.extend(command.spec.flags.iter().zip(names).map(|(flag, names)| {
+        lines.extend(about.spec.flags.iter().zip(names).map(|(flag, names)| {
             vec![
                 Span::new(format!("  {names:width$}"), "accent"),
                 Span::plain(format!("  {}", flag.help)),
@@ -190,11 +227,11 @@ pub fn flag_names(flag: &Flag) -> String {
 
 /// An error naming the command that rejected the line, with the way out under
 /// it, the way a coreutils tool points at its own `--help`.
-fn fail(command: &Command, message: &str) -> Output {
+fn fail(about: About<'_>, message: &str) -> Output {
     Output::Lines(vec![
-        error_line(format!("{}: {message}", command.name)),
+        error_line(format!("{}: {message}", about.name)),
         vec![Span::new(
-            format!("try `{} --help` for more information.", command.name),
+            format!("try `{} --help` for more information.", about.name),
             "dim",
         )],
     ])

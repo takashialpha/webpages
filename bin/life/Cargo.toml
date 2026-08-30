@@ -1,0 +1,13 @@
+[package]
+name = "life"
+version = "0.0.0"
+description = "Conway's game of life, as a wasm guest."
+keywords = ["wasm", "wasi", "terminal"]
+categories = ["command-line-utilities"]
+edition.workspace = true
+readme.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
