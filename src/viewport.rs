@@ -1,18 +1,13 @@
-//! Sizing the terminal to the part of the screen you can actually see.
+//! Sizing the terminal to the part of the screen you can see.
 //!
-//! An on-screen keyboard does not shrink the layout viewport. It shrinks the
-//! visual viewport, which is the window onto it, and only some browsers can be
-//! asked to keep the two in step: `interactive-widget=resizes-content` in the
-//! viewport meta does it for chrome, and safari ignores it. So the layout
-//! cannot be pinned to `100dvh` and a key row cannot be `position: fixed`,
-//! because on ios both of those measure a viewport that runs on behind the
-//! keyboard: the row lands under it, the prompt scrolls to a bottom that is not
-//! the visible bottom, and scrolling detaches the row until the gesture ends.
+//! A keyboard shrinks the visual viewport, not the layout one. Chrome can be
+//! told to keep them together with `interactive-widget=resizes-content`;
+//! Safari ignores it. So `100dvh` and a fixed key row both measure a viewport
+//! that runs on behind the keyboard.
 //!
-//! Measuring the visual viewport directly is the one answer every browser
-//! agrees on. Its height and its offset from the layout viewport go onto the
-//! document as custom properties, and the stylesheet builds the terminal out of
-//! those instead.
+//! Measuring the visual viewport is what every browser agrees on. Its height
+//! and offset go onto the document as custom properties, and the stylesheet
+//! builds the terminal from those.
 
 /// Writes the visual viewport onto the document and keeps it current.
 ///
@@ -65,12 +60,8 @@ pub fn track(on_change: impl Fn() + 'static) {
 #[cfg(not(feature = "hydrate"))]
 pub fn track(_on_change: impl Fn() + 'static) {}
 
-/// How wide and tall one character cell is, in pixels.
-///
-/// Measured rather than assumed. The font is a bitmap that is only crisp at
-/// multiples of its own size, and the stylesheet switches between two of them
-/// at a breakpoint, so the only honest way to know the cell is to ask what a
-/// character actually came out as.
+/// How wide and tall one cell is, in pixels. Measured, because the stylesheet
+/// switches size at a breakpoint.
 #[cfg(feature = "hydrate")]
 #[must_use]
 pub fn cell_size() -> (f64, f64) {

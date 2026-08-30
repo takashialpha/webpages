@@ -1,23 +1,19 @@
-//! The graffiti board: a shared grid many people write to.
+//! The graffiti board: a shared grid anyone can write to.
 //!
-//! Bounded on purpose. There is no free-form text anywhere: a write is a run of
-//! printable ASCII at a coordinate, clipped to its row, checked at every edge.
-//! The worst anyone can do is spell something across the grid that the next
-//! visitor writes over. It is stored as plain text of exactly these dimensions,
-//! which means moderating it is opening the file in an editor.
+//! Bounded on purpose. A write is one printable character at one coordinate,
+//! so the worst anyone can do is spell something the next visitor writes over.
+//! It is stored as plain text, so moderating it is editing a file.
 
-/// Eighty by twenty-four, which is what a terminal has always been.
-///
-/// It does not fit a phone, and is not meant to: the `wall` command puts the
-/// board in a box that scrolls sideways, the way any wide output has to.
+/// Eighty by twenty-four, like a terminal. It does not fit a phone, so the
+/// `wall` command puts it in a box that scrolls sideways.
 pub const COLS: usize = 80;
 pub const ROWS: usize = 24;
 
 /// An unwritten cell.
 pub const BLANK: u8 = b' ';
 
-/// Printable ASCII, and nothing else. Checked at every edge the grid has, so a
-/// control character can never reach the file, the terminal, or anyone else.
+/// Printable ASCII only, checked at every edge, so a control character never
+/// reaches the file or anyone else.
 #[must_use]
 pub const fn printable(byte: u8) -> bool {
     byte >= 0x20 && byte <= 0x7e
@@ -33,12 +29,10 @@ impl Grid {
         Self([[BLANK; COLS]; ROWS])
     }
 
-    /// Sets one cell, addressed the way the board is drawn: `0,0` is the bottom
-    /// left and `y` counts upwards. Returns whether anything changed.
+    /// Sets one cell. `0,0` is the bottom left and `y` counts up, as drawn.
     ///
-    /// Storage runs the other way, top row first, so that the file reads in the
-    /// same order as the board is drawn and editing it by hand needs no mental
-    /// arithmetic. This is the one place the two meet.
+    /// Storage runs the other way, top row first, so the file reads in the
+    /// order the board is drawn. This is where the two meet.
     pub const fn set(&mut self, x: usize, y: usize, byte: u8) -> bool {
         if x >= COLS || y >= ROWS || !printable(byte) {
             return false;
@@ -91,33 +85,30 @@ impl Default for Grid {
     }
 }
 
-/// Cells one address may set per [`WINDOW`]. A row's worth, so a word is quick
-/// and repainting the board is not.
+/// Cells one address may set per [`WINDOW`]: a row's worth.
 #[cfg(feature = "ssr")]
 pub const BUDGET: u32 = 80;
 
 /// Cells everyone together may write per [`WINDOW`].
 ///
-/// The per-address budget is the fair share, and this is the ceiling. It exists
-/// because the address is read from a header: behind Cloudflare that is
-/// trustworthy, but anything reaching the origin directly could claim a new one
-/// for every request and never meet a per-address limit at all.
+/// The address comes from a header. Behind Cloudflare that is trustworthy, but
+/// anything reaching the origin directly could claim a new one per request and
+/// never meet a per-address limit. This is the ceiling that stops it.
 #[cfg(feature = "ssr")]
 pub const CEILING: u32 = 600;
 
 #[cfg(feature = "ssr")]
 pub const WINDOW: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// How many addresses are tracked at once.
+/// How many addresses are remembered at once.
 ///
-/// The key comes from a header, so an attacker choosing it must not be able to
-/// choose how much is remembered. At the cap the oldest is dropped, which costs
-/// that address its history rather than costing everyone the service.
+/// The key comes from a header, so whoever chooses it must not also choose how
+/// much is remembered. Past the cap the oldest is dropped.
 #[cfg(feature = "ssr")]
 const TRACKED: usize = 4096;
 
-/// One address's writes inside the current window. Fixed size, unlike a list of
-/// timestamps, so the cost of remembering someone does not depend on them.
+/// One address's writes in the current window. Fixed size, so remembering
+/// someone costs the same however much they write.
 #[cfg(feature = "ssr")]
 #[derive(Clone, Copy)]
 struct Window {
@@ -134,7 +125,7 @@ impl Window {
         }
     }
 
-    /// Rolls over once the window has elapsed, so a count never carries across.
+    /// Rolls over once the window has elapsed.
     fn current(self, now: std::time::Instant) -> Self {
         if now.duration_since(self.start) >= WINDOW {
             Self::opened(now)
@@ -161,8 +152,7 @@ impl Limiter {
 
     /// Whether `who` may write `cells` more, counting them if so.
     ///
-    /// All or nothing: a write that would cross either limit is refused whole
-    /// rather than truncated, so nobody has to wonder which half landed.
+    /// All or nothing, so nobody has to wonder which half of a write landed.
     fn take(&mut self, who: &str, cells: u32) -> bool {
         let now = std::time::Instant::now();
 
@@ -171,9 +161,8 @@ impl Limiter {
             return false;
         }
 
-        // Only when it is worth doing, rather than scanning every address on
-        // every write, which would make each request cost what the table has
-        // grown to.
+        // Only at the cap. Scanning on every write would make each one cost
+        // whatever the table had grown to.
         if self.seen.len() >= TRACKED {
             self.seen
                 .retain(|_, window| now.duration_since(window.start) < WINDOW);
@@ -266,15 +255,13 @@ impl State {
     }
 }
 
-/// Parses an `x y char` request, setting one cell.
+/// Parses `x y char`.
 ///
-/// The character is optional and everything after the coordinates is taken
-/// literally, so `4 2 ` with a trailing space sets a space and `4 2` with
-/// nothing after it clears the cell. That is the only way to reach a blank
-/// through a command line that splits on whitespace.
+/// The character is optional: `4 2` clears the cell, and `4 2 ` with a
+/// trailing space sets one. That is the only way to reach a blank through a
+/// line split on whitespace.
 ///
-/// Everything is validated here, so a handler only ever sees a write it can
-/// carry out.
+/// Validated here, so a handler only sees writes it can carry out.
 #[must_use]
 pub fn parse_write(body: &str) -> Option<(usize, usize, u8)> {
     // Trailing newlines are the client's, not the writer's. A trailing space is
@@ -298,13 +285,12 @@ pub fn parse_write(body: &str) -> Option<(usize, usize, u8)> {
 
 /// Fetches the board, or writes to it and fetches the result.
 ///
-/// Returns the status alongside the body, because the server answers a refused
-/// write with a plain sentence explaining it, and that sentence is the most
-/// useful thing to show.
+/// Returns the status with the body: the server explains a refusal in a
+/// sentence, and that sentence is what to show.
 ///
 /// # Errors
 ///
-/// Returns a message fit to print when the request cannot be made at all.
+/// A message to print, if the request cannot be made.
 #[cfg(feature = "hydrate")]
 #[expect(
     clippy::future_not_send,
@@ -342,12 +328,11 @@ pub async fn fetch(write: Option<&str>) -> Result<(u16, String), String> {
         .ok_or_else(|| "wall: the board's answer was not text".to_owned())
 }
 
-/// The client half never runs on the server, but the command that calls it is
-/// compiled into both. This exists so that it is.
+/// The server has no browser to ask. This exists so the command compiles there.
 ///
 /// # Errors
 ///
-/// Always: there is no browser here to ask.
+/// Always.
 #[cfg(not(feature = "hydrate"))]
 #[expect(clippy::unused_async, reason = "matches the client signature")]
 pub async fn fetch(_write: Option<&str>) -> Result<(u16, String), String> {

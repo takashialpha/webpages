@@ -1,9 +1,8 @@
 //! The content tree the shell walks.
 //!
-//! Content lives in `content/` as plain text and is pulled in at compile time,
-//! so adding a section means adding a file and one line to [`ROOT`], never a new
-//! command. `ls`, `cat`, `cd`, and tab completion all read this same tree, which
-//! is what stops them drifting apart.
+//! Content lives in `content/` and is baked in at compile time, so a new
+//! section is a file plus a line in [`ROOT`]. `ls`, `cat`, `cd` and completion
+//! all read this tree, so they cannot disagree.
 
 /// A named entry in a directory.
 pub struct Entry {
@@ -61,14 +60,12 @@ pub fn intro() -> &'static str {
 }
 
 pub const ROOT: Node = Node::Dir(&[
-    // Programs, where a unix home directory has always put them.
+    // Programs.
     Entry {
         name: "bin",
         node: Node::Dir(crate::program::BIN),
     },
-    // A home directory, laid out like one. The writing is together, the
-    // projects are together, and the one thing that changes while you are
-    // looking at it is kept apart from the things that do not.
+    // A home directory, laid out like one.
     Entry {
         name: "documents",
         node: Node::Dir(&[
@@ -127,9 +124,8 @@ pub const ROOT: Node = Node::Dir(&[
             },
         ]),
     },
-    // Mutable state, which is what `var` has always meant. The only file here
-    // that anyone can write to, and the only one whose contents come from the
-    // server rather than from this binary.
+    // The only file anyone else can write to, and the only one held by the
+    // server rather than this binary.
     Entry {
         name: "var",
         node: Node::Dir(&[Entry {
@@ -139,16 +135,13 @@ pub const ROOT: Node = Node::Dir(&[
     },
 ]);
 
-/// Resolves a path against a working directory, handling `.`, `..` and a
-/// leading `~`, and rejecting anything that walks past the top.
+/// Resolves a path against a working directory. Handles `.`, `..` and `~`,
+/// and refuses to walk above the top.
 ///
-/// A leading `/` does not resolve. This tree is a home directory and nothing
-/// else: there is no root above it, so a path claiming to start at one is
-/// naming something that is not here, and saying so is more honest than
-/// quietly treating `/` and `~` as the same place.
+/// A leading `/` never resolves: this tree is a home directory, and there is
+/// no root above it.
 ///
-/// Returns the resolved segments, which the caller can turn back into a node
-/// with [`node_at`].
+/// Returns segments, which [`node_at`] turns back into a node.
 #[must_use]
 pub fn resolve(cwd: &[&'static str], path: &str) -> Option<Vec<&'static str>> {
     if path.starts_with('/') {

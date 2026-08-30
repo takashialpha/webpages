@@ -72,17 +72,14 @@ wasm-bindgen = { version = "0", optional = true }
 # but only behind a `#[doc(hidden)]` path that is not its public surface, so it
 # is declared here instead. Already in the tree via leptos, so no new crates.
 wasm-bindgen-futures = { version = "0", optional = true }
-# The web-sys features leptos does not already switch on for us. `Performance`
+# Only the web-sys features leptos does not already switch on. `Performance`
 # measures how long the page has been open, see clock.rs; `VisualViewport`
 # measures the part of the screen a phone keyboard leaves visible, see
-# viewport.rs, `CssStyleDeclaration` is how that reaches the stylesheet, and the
-# request types are what the `wall` command talks to the server with.
+# viewport.rs; `Selection` is how ctrl-c tells a copy from an interrupt.
+# Everything else reached for here, fetch and styles included, leptos already
+# enables, and asking again would only be a second place to keep in step.
 web-sys = { version = "0", features = [
-  "CssStyleDeclaration",
   "Performance",
-  "Request",
-  "RequestInit",
-  "Response",
   "Selection",
   "VisualViewport",
 ], optional = true }

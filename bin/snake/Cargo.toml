@@ -1,0 +1,13 @@
+[package]
+name = "snake"
+version = "0.0.0"
+description = "Snake, as a wasm guest."
+keywords = ["wasm", "wasi", "terminal", "game"]
+categories = ["games"]
+edition.workspace = true
+readme.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true

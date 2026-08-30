@@ -30,14 +30,35 @@ guests:
 
 # build the guests and serve the site
 serve: guests
+    #!/bin/sh
+    # Ctrl-C is how a server is stopped, not a failure. It reaches every
+    # process in the foreground group at once, so the recipe catches it and
+    # ends quietly rather than letting the shell report a signalled child.
+    trap 'exit 0' INT TERM
     cargo leptos serve --release
 
-# format and lint everything, site and guests, the way CI does
-check:
+# everything CI runs
+check: fmt deps (lint "ssr") (lint "hydrate") (lint "guests")
+
+# check formatting
+fmt:
     cargo fmt --all -- --check
-    cargo clippy --all-targets --all-features -- -D warnings
-    cargo clippy --workspace --exclude webpages --target wasm32-wasip1 -- -D warnings
+
+# check for unused dependencies
+deps:
     cargo shear
+
+# lint one target: ssr, hydrate, or guests
+lint target:
+    #!/bin/sh
+    set -eu
+    case "{{ target }}" in
+      ssr)     args="--no-default-features --features ssr --all-targets" ;;
+      hydrate) args="--no-default-features --features hydrate --target wasm32-unknown-unknown" ;;
+      guests)  args="--workspace --exclude webpages --target wasm32-wasip1" ;;
+      *) echo "no such target: {{ target }}" >&2; exit 1 ;;
+    esac
+    cargo clippy $args -- -D warnings
 
 # throw away everything built
 clean:

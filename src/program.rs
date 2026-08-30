@@ -1,12 +1,8 @@
-//! What it takes to be a program: draw a frame, take a key, decide when to
-//! stop.
+//! Programs: draw a frame, take a key, say when to stop.
 //!
-//! The terminal owns the loop and calls into this, rather than a program
-//! owning the loop and calling out. That is not a style choice: WebAssembly
-//! cannot suspend a synchronous call, so a guest that ran its own loop would
-//! block the page until it finished. Handing it one frame at a time is what
-//! lets a program be interactive at all, and it is the same shape a WASI guest
-//! will be driven through, so the two cannot drift.
+//! The terminal owns the loop and calls in. It has to: WebAssembly cannot
+//! suspend a synchronous call, so a guest running its own loop would freeze
+//! the page until it finished.
 
 use crate::screen::Screen;
 
@@ -32,12 +28,10 @@ pub trait Program {
     fn key(&mut self, _key: &str) {}
 }
 
-/// A program as the filesystem holds it: a name, a line about it, and a way to
-/// open one.
+/// A program, as the filesystem holds it.
 ///
-/// There is no separate registry. Programs are entries in `~/bin`, so `ls`
-/// lists them and completion offers them for the same reason it offers any
-/// other file, and the tree is the only place that says what exists.
+/// There is no separate registry: programs are entries in `~/bin`, so the tree
+/// is the only place that says what exists.
 pub struct Listing {
     pub name: &'static str,
     pub summary: &'static str,
@@ -65,6 +59,13 @@ pub const LIFE: Listing = Listing {
     url: "bin/life.wasm",
 };
 
+pub const SNAKE: Listing = Listing {
+    name: "snake",
+    summary: "eat, grow, do not bite yourself",
+    spec: crate::args::Spec::NONE,
+    url: "bin/snake.wasm",
+};
+
 pub const STARS: Listing = Listing {
     name: "stars",
     summary: "a drifting starfield",
@@ -72,11 +73,15 @@ pub const STARS: Listing = Listing {
     url: "bin/stars.wasm",
 };
 
-/// What `~/bin` holds. Adding a program is an entry here and a `Listing`.
+/// What `~/bin` holds.
 pub const BIN: &[crate::fs::Entry] = &[
     crate::fs::Entry {
         name: LIFE.name,
         node: crate::fs::Node::Program(&LIFE),
+    },
+    crate::fs::Entry {
+        name: SNAKE.name,
+        node: crate::fs::Node::Program(&SNAKE),
     },
     crate::fs::Entry {
         name: STARS.name,
@@ -84,8 +89,7 @@ pub const BIN: &[crate::fs::Entry] = &[
     },
 ];
 
-/// What opening a guest produced: something to drive, or something it printed
-/// on its way out.
+/// What opening a guest produced.
 pub enum Opened {
     Draws(Box<dyn Program>),
     Printed(crate::shell::Output),
@@ -93,70 +97,63 @@ pub enum Opened {
 
 /// Fetches a guest and works out which shape it is.
 ///
-/// A program that exports `frame` draws, and is driven a frame at a time. One
-/// that only exports `_start` runs to completion here and now: it finishes in
-/// microseconds, so there is nothing to yield to, and what it printed belongs
-/// in the scrollback rather than on a screen of its own.
+/// One that exports `frame` draws, a frame at a time. One that only exports
+/// `_start` runs to completion here: it takes microseconds, and what it
+/// printed belongs in the scrollback.
 ///
 /// # Errors
 ///
-/// Returns a message fit to print when the guest cannot be fetched or
-/// instantiated, which includes asking for an import that is not provided.
+/// A message to print, if it cannot be fetched or instantiated.
 #[cfg(feature = "hydrate")]
 #[expect(
     clippy::future_not_send,
     reason = "the browser is single threaded and nothing here crosses a thread"
 )]
 pub async fn open_guest(url: &str) -> Result<Opened, String> {
-    use crate::shell::{Output, Span, body_lines};
+    use crate::shell::{Output, Span, body_lines, error_line};
     use crate::wasi::Finished;
 
     let mut guest = crate::wasi::open(url).await?;
     if guest.draws() {
-        return Ok(Opened::Draws(Box::new(Guest(guest))));
+        return Ok(Opened::Draws(Box::new(guest)));
     }
 
     let (mut lines, note) = match guest.run() {
-        // Only when it is worth saying: a program that worked says nothing
-        // about having worked.
+        // A program that worked says nothing about having worked.
         Finished::Exited { code, output } => (
             body_lines(&output),
-            (code != 0).then(|| Span::new(format!("exit {code}"), "dim")),
+            (code != 0).then(|| vec![Span::new(format!("exit {code}"), "dim")]),
         ),
         Finished::Trapped { output } => (
             body_lines(&output),
-            Some(Span::new("swagsh: the program stopped unexpectedly", "err")),
+            Some(error_line("the program stopped unexpectedly")),
         ),
     };
-    lines.extend(note.map(|span| vec![span]));
+    lines.extend(note);
     Ok(Opened::Printed(Output::Lines(lines)))
 }
 
-/// The server fetches nothing and runs nothing. This exists so the terminal
-/// that calls it compiles into its build.
+/// The server runs nothing. This exists so the terminal compiles there.
 ///
 /// # Errors
 ///
-/// Always: there is no browser here to run anything in.
+/// Always.
 #[cfg(not(feature = "hydrate"))]
 #[expect(clippy::unused_async, reason = "matches the client signature")]
 pub async fn open_guest(_url: &str) -> Result<Opened, String> {
     Err("no browser to run a program in".to_owned())
 }
 
-/// A fetched guest, driven through the same interface a native program is, so
-/// the terminal cannot tell the two apart.
+/// The trait exists so the terminal can hold a program without knowing
+/// whether its build has a browser to run one.
 #[cfg(feature = "hydrate")]
-struct Guest(crate::wasi::Guest);
-
-#[cfg(feature = "hydrate")]
-impl Program for Guest {
+impl Program for crate::wasi::Guest {
     fn start(&mut self, screen: &mut Screen) {
-        self.0.begin(screen);
+        self.begin(screen);
     }
 
     fn frame(&mut self, screen: &mut Screen, elapsed: f64) -> Step {
-        if self.0.frame(screen, elapsed) {
+        if self.advance(screen, elapsed) {
             Step::Done
         } else {
             Step::Running
@@ -164,6 +161,6 @@ impl Program for Guest {
     }
 
     fn key(&mut self, key: &str) {
-        self.0.press(key);
+        self.press(key);
     }
 }

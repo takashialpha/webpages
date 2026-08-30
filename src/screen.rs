@@ -1,17 +1,13 @@
-//! The alternate screen: a grid of cells a program draws into.
+//! The alternate screen: a grid a program draws into.
 //!
-//! A terminal keeps two buffers. The normal one scrolls and is what the shell
-//! prints into, which here is the scrollback and is left alone. The alternate
-//! one is a fixed grid the size of the window, which a full screen program
-//! takes over and which is thrown away when it exits, leaving the scrollback
-//! exactly as it was. That is the same arrangement, and the reason `vim`
-//! leaving does not eat your shell history.
+//! A terminal keeps two buffers. The scrollback is the normal one and is left
+//! alone; this is the other, thrown away when the program exits. It is why
+//! leaving `vim` does not eat your shell history.
 //!
-//! Colours are indices into the sixteen a console has, resolved by the
-//! stylesheet, so a program follows whatever `theme` is set to without knowing
-//! that themes exist.
+//! Colours are indices into the sixteen a console has. The stylesheet resolves
+//! them, so a program follows `theme` without knowing themes exist.
 
-/// The sixteen colours, in the order every terminal numbers them.
+/// The sixteen colours a terminal has.
 pub const COLORS: usize = 16;
 
 /// Default foreground and background, as indices into that set.
@@ -40,9 +36,8 @@ impl Default for Cell {
     }
 }
 
-/// A run of characters sharing one pair of colours, which is what a row is cut
-/// into before it is drawn: one element per run rather than one per cell, so a
-/// mostly empty row costs almost nothing.
+/// A run of characters sharing one pair of colours. Rows are drawn as runs,
+/// not cells, so a mostly empty row costs almost nothing.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Run {
     pub text: String,
@@ -77,9 +72,7 @@ impl Screen {
         self.rows
     }
 
-    /// Resizes to a new shape, keeping whatever still fits. A program that
-    /// redraws every frame will not notice; one that does not keeps its
-    /// picture rather than having it blanked out from under it.
+    /// Resizes, keeping whatever still fits.
     pub fn resize(&mut self, cols: usize, rows: usize) {
         if cols == self.cols && rows == self.rows {
             return;
@@ -99,9 +92,8 @@ impl Screen {
         self.cells.fill(Cell::BLANK);
     }
 
-    /// Writes one cell, ignoring anything off the grid. Out of range is not an
-    /// error: a program that draws a box slightly too wide should lose the
-    /// overhang, not stop.
+    /// Writes one cell. Off the grid is ignored, not an error: a box drawn a
+    /// little too wide should lose the overhang, not stop.
     pub fn put(&mut self, x: usize, y: usize, ch: char, fg: u8, bg: u8) {
         if x >= self.cols || y >= self.rows {
             return;
@@ -111,14 +103,6 @@ impl Screen {
             fg: fg % COLORS_U8,
             bg: bg % COLORS_U8,
         };
-    }
-
-    #[must_use]
-    pub fn get(&self, x: usize, y: usize) -> Cell {
-        if x >= self.cols || y >= self.rows {
-            return Cell::BLANK;
-        }
-        self.cells[y * self.cols + x]
     }
 
     /// Cuts one row into runs of matching colour.

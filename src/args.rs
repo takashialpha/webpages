@@ -1,21 +1,18 @@
 //! Option parsing, shared by every command.
 //!
-//! Each command declares what it takes in a [`Spec`], and [`parse`] enforces it
-//! before the command runs. Nothing hand-rolls its own argument handling, so a
-//! command cannot quietly ignore what it was given: an unknown option, a missing
-//! operand, or one operand too many all stop at the same place and report the
-//! same way.
+//! Each command declares what it takes in a [`Spec`], and [`parse`] enforces
+//! it before the command runs. No command parses its own line, so none can
+//! quietly ignore what it was given.
 //!
-//! The spec is also what `help` and tab completion read, so usage text and flag
-//! completion are generated from the thing that actually runs.
+//! `help` and completion read the same spec, so usage text is generated from
+//! what actually runs.
 
 use crate::shell::{Line, Output, Span, error_line};
 
-/// The three things needed to check a line and explain it: what it is called,
-/// what it does, and what it takes.
+/// What is needed to check a line and explain it.
 ///
-/// Commands and programs are different kinds of thing, but they are typed the
-/// same way, so they are refused and explained the same way too.
+/// Commands and programs are different things typed the same way, so they are
+/// refused and explained the same way.
 #[derive(Clone, Copy)]
 pub struct About<'a> {
     pub name: &'a str,
@@ -33,9 +30,8 @@ pub struct Flag {
     pub help: &'static str,
 }
 
-/// What Tab offers after a command, which is not the same for all of them: a
-/// command that can only be given a directory should not offer files, and one
-/// that takes nothing at all should offer nothing.
+/// What Tab offers after a command. `cd` takes only directories; `pwd` takes
+/// nothing.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Completes {
     Paths,
@@ -115,14 +111,12 @@ impl<'a> Args<'a> {
 
 /// Parses one command's arguments against its spec.
 ///
-/// Options may come in any order and may be clustered, so `-a1` is `-a -1`. A
-/// bare `--` ends option parsing and a lone `-` is an operand, which is what
-/// lets `cd -` name a directory rather than read as a malformed option.
+/// Options may be clustered, so `-a1` is `-a -1`. `--` ends them, and a lone
+/// `-` is an operand, which is what lets `cd -` name a directory.
 ///
 /// # Errors
 ///
-/// Returns what the shell should print instead of running the command: the
-/// usage text when `-h` or `--help` was asked for, and an error otherwise.
+/// What to print instead of running: usage for `-h`, an error otherwise.
 pub fn parse<'a>(about: About<'_>, argv: &[&'a str]) -> Result<Args<'a>, Output> {
     let spec = about.spec;
     let mut shorts = Vec::new();
@@ -167,7 +161,7 @@ pub fn parse<'a>(about: About<'_>, argv: &[&'a str]) -> Result<Args<'a>, Output>
     Ok(Args { shorts, operands })
 }
 
-/// The usage line, built from the spec rather than written out beside it.
+/// The usage line, built from the spec.
 pub fn usage_line(about: About<'_>) -> String {
     let spec = about.spec;
 
@@ -225,8 +219,7 @@ pub fn flag_names(flag: &Flag) -> String {
     )
 }
 
-/// An error naming the command that rejected the line, with the way out under
-/// it, the way a coreutils tool points at its own `--help`.
+/// An error naming the command, with the way out under it.
 fn fail(about: About<'_>, message: &str) -> Output {
     Output::Lines(vec![
         error_line(format!("{}: {message}", about.name)),

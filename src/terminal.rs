@@ -11,25 +11,20 @@ use crate::shell::{self, Line, Output, Session, Sink, Span};
 /// One executed command and whatever it printed.
 #[derive(Clone)]
 struct Entry {
-    /// The prompt's tail at the time, so old lines keep their own working
-    /// directory. Only the tail: the rest of the prompt is fixed, and is
-    /// rebuilt around this by [`prompt_view`].
+    /// The prompt's tail at the time, so old lines keep their directory.
+    /// [`prompt_view`] rebuilds the fixed part around it.
     tail: String,
     input: String,
-    /// A signal rather than a value, because a command is allowed to answer
-    /// later. Anything settled writes it once and never touches it again.
+    /// A signal, because a command may answer later.
     output: RwSignal<Output>,
 }
 
 /// The prompt, built the same way everywhere it appears.
 ///
-/// The user and the host are separate elements so that no single text node
-/// holds anything shaped like an email address, which Cloudflare would rewrite
-/// (see the note in the terminal's view). That split has to be identical in
-/// the live prompt and in the echoed one: each inline box is shaped and
-/// rounded on its own, so the same characters in one box and in four do not
-/// land on quite the same pixels, and the line visibly shifts the moment you
-/// press Enter.
+/// Split into elements so no text node looks like an email address, which
+/// Cloudflare rewrites. Both prompts must split identically: each inline box
+/// rounds on its own, so the same text in one box and in four lands a
+/// sixteenth of a pixel apart and the line shifts when you press Enter.
 fn prompt_view(tail: impl IntoView + 'static) -> impl IntoView {
     view! {
         <span class="prompt">
@@ -41,10 +36,7 @@ fn prompt_view(tail: impl IntoView + 'static) -> impl IntoView {
     }
 }
 
-/// Whether anything on the page is selected.
-///
-/// `ctrl-c` means copy when something is and interrupt when nothing is, which
-/// is the same split a terminal emulator makes.
+/// Whether anything is selected. `ctrl-c` copies if so, interrupts if not.
 #[cfg(feature = "hydrate")]
 fn selecting() -> bool {
     window()
@@ -55,25 +47,18 @@ fn selecting() -> bool {
         .is_some_and(|text| !text.is_empty())
 }
 
-/// The server has no selection to read, and never handles a keystroke. This
-/// exists so the module compiles into its build alongside the rest.
+/// The server handles no keystrokes. Here so the module compiles there.
 #[cfg(not(feature = "hydrate"))]
 const fn selecting() -> bool {
     false
 }
 
-/// The frame loop, stored so it can schedule itself.
-///
-/// Shared rather than owned because it has to outlive the call that set it up
-/// and be reachable from the frame it asks for, which is the one thing a plain
-/// closure cannot do for itself.
+/// The frame loop, stored so it can schedule itself. Shared because it must
+/// outlive the call that set it up and be reachable from the frame it asks
+/// for.
 type Tick = std::rc::Rc<dyn Fn(f64)>;
 
 /// How many whole cells fit into a span of pixels.
-///
-/// Clamped before it is counted: a zero cell would divide by nothing, and no
-/// screen is four thousand characters across, so the conversion cannot lose
-/// anything the caller would have wanted.
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
@@ -169,19 +154,17 @@ pub fn Terminal(children: Children) -> impl IntoView {
     // Where the caret sits, in cells. The font is fixed width, so the column is
     // the offset: no measuring, and it stays right after an arrow key.
     let column = RwSignal::new(0_usize);
-    // The first column shown, for a line too long for the field. Kept here in
-    // whole columns rather than read back from the input: the input scrolls by
-    // pixels and will happily stop half way through a character, which a
-    // terminal never does. Its own text is not drawn, so only this matters.
+    // The first column shown, when a line outgrows the field. In whole
+    // columns: the input scrolls by pixels and stops mid-character, which a
+    // terminal never does. Its text is not drawn, so only this matters.
     let scrolled = RwSignal::new(0_usize);
 
     let input_ref = NodeRef::<html::Input>::new();
     let bottom_ref = NodeRef::<html::Div>::new();
     let tty_ref = NodeRef::<html::Main>::new();
 
-    // The running program and the screen it draws into. Local storage because
-    // neither is `Send`, and neither has any reason to be: both live and die
-    // on the one thread the browser gives us.
+    // The running program and its screen. Local storage: neither is `Send`,
+    // and both live on the one thread a browser has.
     let running = StoredValue::new_local(None::<Box<dyn Program>>);
     let screen = StoredValue::new_local(Screen::new(0, 0));
     // One signal per row, so a frame only rewrites the rows that changed
@@ -199,9 +182,8 @@ pub fn Terminal(children: Children) -> impl IntoView {
         }
     };
 
-    // Read the caret back out of the input after anything that could move it.
-    // Only writes when it actually moved, since a held key syncs on every
-    // repeat and an unconditional set would redraw the cursor each time.
+    // Read the caret back after anything that could move it. Only writes on
+    // a change: a held key syncs every repeat.
     let sync_column = move || {
         if let Some(element) = input_ref.get()
             && let Ok(Some(at)) = element.selection_start()
@@ -239,11 +221,9 @@ pub fn Terminal(children: Children) -> impl IntoView {
         }
     });
 
-    // On the next frame, not this one: whatever was just printed has to be laid
-    // out before the browser can be told where the bottom now is. Chrome hides
-    // the difference by scrolling the focused input back into view by itself,
-    // which is why this only shows up elsewhere, as a prompt left below the
-    // bottom of a full screen.
+    // Next frame, not this one: what was just printed has to be laid out
+    // before the browser can be told where the bottom is. Chrome hides this by
+    // scrolling the focused input into view itself; Firefox does not.
     let scroll_to_prompt = move || {
         request_animation_frame(move || {
             if let Some(bottom) = bottom_ref.get_untracked() {
@@ -505,10 +485,8 @@ pub fn Terminal(children: Children) -> impl IntoView {
             .map_or_else(|| input.get_untracked().len(), |at| at as usize)
     };
 
-    // On the next frame, for the same reason the cursor syncs there: changing
-    // the line writes `prop:value` back to the input, and the browser puts the
-    // caret at the end when it does. Placing it before that write would just be
-    // overwritten.
+    // Next frame: changing the line rewrites `prop:value`, which puts the
+    // caret at the end. Placing it first would just be overwritten.
     let put_caret = move |at: usize| {
         request_animation_frame(move || {
             if let Some(element) = input_ref.get_untracked() {

@@ -1,8 +1,7 @@
 //! Command types, dispatch, and completion.
 //!
-//! Commands are plain functions in a `&'static` registry, so `help` and tab
-//! completion are both generated from the same slice and cannot fall out of step
-//! with what actually runs.
+//! Commands are functions in a `&'static` registry. `help` and completion are
+//! generated from it, so they cannot fall out of step with what runs.
 
 use std::sync::Arc;
 
@@ -36,10 +35,8 @@ impl Span {
 /// One line of output.
 pub type Line = Vec<Span>;
 
-/// Somewhere a command can put its output once it has some.
-///
-/// Handed to a [`Task`], and good for exactly one write. Copy, so a task can
-/// carry it into whatever callback eventually resolves.
+/// Where a command puts its output once it has some. Copy, so a task can
+/// carry it into whatever callback resolves.
 #[derive(Clone, Copy)]
 pub struct Sink(RwSignal<Output>);
 
@@ -55,9 +52,8 @@ impl Sink {
     }
 }
 
-/// The work behind an [`Output::Pending`]. Run once, on the client, with
-/// somewhere to put the answer. Spawning is the task's own business: some have
-/// to await a response, and some only look asynchronous.
+/// The work behind an [`Output::Pending`]. Run once, with somewhere to put
+/// the answer. Spawning is the task's own business.
 pub type Task = Arc<dyn Fn(Sink) + Send + Sync>;
 
 /// What a command hands back to the terminal.
@@ -119,10 +115,9 @@ impl Default for Session {
     }
 }
 
-/// Splits body text into output lines, turning bare URLs into link spans.
+/// Splits text into lines, turning bare URLs into links.
 ///
-/// Terminal emulators make URLs clickable, so this is the one place output
-/// stops being inert text. Everything else on the page is typed, not clicked.
+/// The one place output is clickable. Everything else is typed.
 pub fn body(text: &str) -> Output {
     Output::Lines(body_lines(text))
 }
@@ -202,9 +197,9 @@ pub fn run(session: &mut Session, input: &str) -> Output {
 
 /// Resolves something that is not a builtin.
 ///
-/// Only a path runs a program: `./bin/life` and `bin/life` both work, and a
-/// bare `life` does not. There is no `PATH` here, and inventing one would mean
-/// a name resolving to something the tree does not say is there.
+/// Only a path runs a program: `./bin/life` and `bin/life` work, a bare `life`
+/// does not. There is no `PATH`, and inventing one would mean a name resolving
+/// to something the tree never said was there.
 fn launchable(session: &Session, name: &str, args: &[&str]) -> Output {
     let found = if name.contains('/') {
         match fs::resolve(&session.cwd, name).and_then(|segments| fs::node_at(&segments)) {
@@ -321,8 +316,8 @@ pub fn complete(session: &Session, input: &str) -> Completion {
     }
 }
 
-/// Completions for a partial option, read from the spec of whichever command
-/// the line starts with. Every command takes `-h`, so that is offered too.
+/// Options for whichever command the line starts with, from its spec. Every
+/// command takes `-h`.
 fn flag_candidates(head: &str, word: &str) -> Vec<String> {
     let Some(name) = head.split_whitespace().next() else {
         return Vec::new();
@@ -342,8 +337,7 @@ fn flag_candidates(head: &str, word: &str) -> Vec<String> {
     candidates
 }
 
-/// What the command at the head of the line can be given, so that `cd` is not
-/// offered files it cannot change into and `pwd` is not offered anything.
+/// What the command at the head of the line can be given.
 fn wanted(head: &str) -> Completes {
     head.split_whitespace()
         .next()

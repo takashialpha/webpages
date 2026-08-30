@@ -36,9 +36,8 @@ pub fn uptime_secs() -> i64 {
 
 /// Milliseconds since this page was rendered.
 ///
-/// `performance.now()` is monotonic and keeps advancing while the tab is in the
-/// background, unlike an interval, which browsers throttle to about once a
-/// minute and which would therefore undercount.
+/// `performance.now()` is monotonic and keeps running in a background tab,
+/// unlike an interval, which browsers throttle and which would undercount.
 #[cfg(feature = "hydrate")]
 #[must_use]
 pub fn since_load_millis() -> f64 {

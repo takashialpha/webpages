@@ -1,9 +1,8 @@
-//! The command set, and the registry `help` and tab completion are built from.
+//! The command set.
 //!
-//! Adding a command is one entry in [`COMMANDS`] and one function. Nothing else
-//! needs touching: `help` lists whatever is here, completion offers it, and the
-//! [`Spec`] on the entry is checked before the function runs, so a command body
-//! only ever sees arguments it declared.
+//! Adding one is an entry in [`COMMANDS`] and a function. `help` lists it,
+//! completion offers it, and its [`Spec`] is checked before it runs, so a
+//! command body only sees arguments it declared.
 
 use crate::args::{Args, Completes, Flag, Spec, usage};
 use crate::clock;
@@ -14,9 +13,8 @@ use crate::shell::{
 use crate::theme;
 use crate::wall;
 
-/// Options are kept to the ones that mean something here. `ls -l` is absent on
-/// purpose: its columns are mode, owner, group, and mtime, and this tree has
-/// none of those to report, so it could only make them up.
+/// `ls -l` is absent on purpose: its columns are mode, owner, group and
+/// mtime, and this tree has none of them to report.
 const LS_FLAGS: &[Flag] = &[
     Flag {
         short: 'a',
@@ -276,11 +274,10 @@ fn cd(session: &mut Session, args: &Args<'_>) -> Output {
     }
 }
 
-/// One operand of a `cat`, resolved but not yet rendered.
+/// One operand of a `cat`, resolved but not rendered.
 ///
-/// Kept as a plan rather than rendered as it goes, because a live file cannot
-/// be read without asking the server, and the operands after it still have to
-/// come out in the order they were given.
+/// A plan, because a live file has to be fetched and the operands after it
+/// still have to come out in order.
 enum Piece {
     Text(&'static str),
     Live(Live),
@@ -341,8 +338,7 @@ impl Piece {
     }
 }
 
-/// Renders a resolved plan, numbering across the whole of it rather than
-/// restarting per file, which is what `cat -n` on several files does.
+/// Renders a plan. `-n` numbers across the whole thing, not per file.
 fn spell(plan: &[Piece], board: &str, numbered: bool) -> Vec<Line> {
     let mut lines: Vec<Line> = Vec::new();
     let mut count = 0_usize;
@@ -440,13 +436,9 @@ fn graffiti(_session: &mut Session, args: &Args<'_>) -> Output {
 
 /// The board in a frame, with its axes outside it.
 ///
-/// Addressed the way it is drawn: `0,0` is the bottom left corner and `y`
-/// counts upwards, so it reads as the first quadrant of a graph rather than as
-/// lines of a document.
-///
-/// The frame is drawn in the box-drawing characters the VGA ROM font actually
-/// carries, the same ones a bios screen is built from, rather than in `+` and
-/// `-`. Its width is where the stylesheet's 85 column measure comes from.
+/// `0,0` is the bottom left and `y` counts up, like the first quadrant of a
+/// graph. The frame uses the box-drawing characters the VGA ROM font carries.
+/// Its width is where the stylesheet's 85 column measure comes from.
 fn board_lines(board: &str) -> Output {
     // Indexed rather than computed, so there is no integer cast in sight.
     const DIGITS: &[u8; 10] = b"0123456789";

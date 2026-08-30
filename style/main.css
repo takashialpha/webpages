@@ -420,6 +420,11 @@ a:focus-visible,
      draws still shows, behind those glyphs. */
   color: transparent;
   font: inherit;
+  /* One line, said as a height. Firefox will not take a `line-height` below
+     normal on an input, so it lays one out 1.2 lines tall while everything
+     around it is 1, and baseline alignment then drops the prompt by the
+     difference. That is the prompt jumping when a line is echoed. */
+  height: 1em;
   /* The real caret is a thin bar. A console blinks an underscore, so the native
      one is hidden and `.cursor` is drawn instead. */
   caret-color: transparent;
