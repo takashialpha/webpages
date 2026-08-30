@@ -1,0 +1,59 @@
+# Template: replace user takashi here with yours
+
+[Unit]
+Description=takashialpha webpages (Leptos/Axum)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=webpages
+Group=webpages
+# The board lives in takashi's home so it can be edited by hand. The service
+# reaches it through this group, not by being that user.
+SupplementaryGroups=takashi
+WorkingDirectory=/opt/webpages/current
+ExecStart=/opt/webpages/current/webpages
+Environment=LEPTOS_OUTPUT_NAME=webpages
+Environment=LEPTOS_SITE_ROOT=site
+Environment=LEPTOS_SITE_PKG_DIR=pkg
+Environment=LEPTOS_SITE_ADDR=[::1]:3000
+Environment=LEPTOS_HASH_FILES=true
+# Outside the release directory on purpose: a deploy replaces
+# /opt/webpages/current wholesale and would take the board with it.
+Environment=WALL_PATH=/home/takashi/webpages/wall.txt
+Restart=on-failure
+RestartSec=2
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+# read-only rather than yes: the board's directory has to still exist for
+# ReadWritePaths to open it back up.
+ProtectHome=read-only
+# The `-` makes it optional. Without it a missing directory fails the whole
+# namespace setup and the service will not start at all: a broken board should
+# not take the site down. The server logs an error when it cannot write.
+ReadWritePaths=-/home/takashi/webpages
+ProtectProc=invisible
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# The board is the only file this writes, and it has to stay group-writable so
+# it can still be edited by hand. ReadWritePaths is what keeps that narrow.
+UMask=0002
+
+[Install]
+WantedBy=multi-user.target

@@ -86,6 +86,19 @@ There are no version tags; the latest build is always whatever is in `main`.
 
 ## Deploying
 
+The unit and the deploy script live in `deploy/` and travel in the release archive, so the server can fetch the pair that matches the binary. Install them by fetching, never by pasting into an editor: a paste that loses line breaks produces a script that still looks right and does not parse.
+
+```sh
+sudo curl -fsSL -o /usr/local/bin/deploy-webpages \
+  https://raw.githubusercontent.com/takashialpha/webpages/main/deploy/deploy-webpages
+sudo chmod +x /usr/local/bin/deploy-webpages
+sudo curl -fsSL -o /etc/systemd/system/webpages.service \
+  https://raw.githubusercontent.com/takashialpha/webpages/main/deploy/webpages.service
+sudo systemctl daemon-reload
+```
+
+Then `deploy-webpages` fetches the latest build, swaps it in, and rolls back if the new release does not serve its own assets.
+
 Build with `just build` rather than `cargo leptos build` alone, or `bin/` ships empty and every program in it 404s when it is run. Then copy the server binary, `target/release/hash.txt`, and the `target/site` directory to the target host, keeping `hash.txt` in the same directory as the binary. Then set:
 
 ```sh

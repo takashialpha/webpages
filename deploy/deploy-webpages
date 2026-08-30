@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO=takashialpha/webpages
+ASSET=webpages-x86_64-linux.tar.gz
+BASE="https://github.com/$REPO/releases/download/build"
+ROOT=/opt/webpages
+ORIGIN='http://[::1]:3000'
+
+[ "$EUID" -eq 0 ] || exec sudo -- "$0" "$@"
+
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+
+curl -fsSL "$BASE/$ASSET"        -o "$TMP/$ASSET"
+curl -fsSL "$BASE/$ASSET.sha256" -o "$TMP/$ASSET.sha256"
+( cd "$TMP" && sha256sum -c --status "$ASSET.sha256" )
+
+NEW=$(cut -d' ' -f1 < "$TMP/$ASSET.sha256")
+if [ -f "$ROOT/.deployed" ] && [ "$(cat "$ROOT/.deployed")" = "$NEW" ]; then
+    echo "already at ${NEW:0:12}, nothing to do"
+    exit 0
+fi
+
+tar -C "$TMP" -xzf "$TMP/$ASSET"
+
+# Leptos resolves the content-hashed bundle names through hash.txt, and looks
+# for it beside the binary. Without it every render panics and the site serves
+# nothing at all.
+for f in webpages hash.txt site; do
+    [ -e "$TMP/$f" ] || { echo "archive is missing $f" >&2; exit 1; }
+done
+
+# The programs under bin/ are built separately from the site, so an archive
+# built without that step is complete except for them.
+shopt -s nullglob
+guests=("$TMP"/site/bin/*.wasm)
+[ ${#guests[@]} -gt 0 ] || { echo "archive has no programs in site/bin" >&2; exit 1; }
+
+rm -rf "$ROOT/next" "$ROOT/prev"
+mkdir -p "$ROOT/next"
+install -m 0755 "$TMP/webpages" "$ROOT/next/webpages"
+install -m 0644 "$TMP/hash.txt" "$ROOT/next/hash.txt"
+cp -a "$TMP/site" "$ROOT/next/site"
+chmod -R a+rX "$ROOT/next"
+
+HAD_CURRENT=0
+[ -e "$ROOT/current" ] && { mv "$ROOT/current" "$ROOT/prev"; HAD_CURRENT=1; }
+mv "$ROOT/next" "$ROOT/current"
+
+# A 200 on `/` does not mean the deploy is good. Follow what the page and the
+# release actually reference, and confirm each one resolves.
+healthy() {
+    local html urls url guest
+    html=$(curl -fsS --retry 10 --retry-delay 1 --retry-connrefused "$ORIGIN/") || return 1
+
+    urls=$(grep -oE '/pkg/[A-Za-z0-9_.-]+\.(css|js|wasm)' <<<"$html" | sort -u)
+    [ -n "$urls" ] || { echo "page references no bundle assets" >&2; return 1; }
+    for url in $urls; do
+        curl -fsS -o /dev/null "$ORIGIN$url" \
+            || { echo "bundle asset does not resolve: $url" >&2; return 1; }
+    done
+
+    # Programs are fetched when they are run, so nothing on the page points at
+    # them and a missing one would only show up when somebody typed its name.
+    for guest in "$ROOT"/current/site/bin/*.wasm; do
+        curl -fsS -o /dev/null "$ORIGIN/bin/$(basename "$guest")" \
+            || { echo "program does not resolve: $(basename "$guest")" >&2; return 1; }
+    done
+}
+
+systemctl restart webpages
+if healthy; then
+    echo "$NEW" > "$ROOT/.deployed"
+    rm -rf "$ROOT/prev"
+    echo "deployed ${NEW:0:12}"
+else
+    if [ "$HAD_CURRENT" -eq 1 ]; then
+        echo "health check failed, rolling back" >&2
+        rm -rf "$ROOT/current"
+        mv "$ROOT/prev" "$ROOT/current"
+        systemctl restart webpages
+    else
+        echo "health check failed, and there is no previous release to roll back to" >&2
+    fi
+    exit 1
+fi
+
+# The board is written on every change, so a service that cannot write it loses
+# everything drawn since the last restart. The server says so at startup.
+if journalctl -u webpages --since "-1 min" 2>/dev/null | grep -q 'cannot write the graffiti board'; then
+    echo "warning: the service cannot write its board; see WALL_PATH in the unit" >&2
+fi

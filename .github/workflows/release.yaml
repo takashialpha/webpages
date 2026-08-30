@@ -33,7 +33,10 @@ jobs:
           # for it beside the binary. Without it the site serves unstyled.
           cp target/release/hash.txt dist/
           cp -r target/site dist/site
-          tar -C dist -czf webpages-x86_64-linux.tar.gz webpages hash.txt site
+          # The unit and the deploy script travel with the release, so the
+          # server can always fetch the pair that matches the binary.
+          cp -r deploy dist/deploy
+          tar -C dist -czf webpages-x86_64-linux.tar.gz webpages hash.txt site deploy
           sha256sum webpages-x86_64-linux.tar.gz > webpages-x86_64-linux.tar.gz.sha256
       - name: Drop previous rolling release
         env:
