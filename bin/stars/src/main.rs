@@ -9,71 +9,7 @@
 
 use std::cell::RefCell;
 
-mod tty {
-    //! The screen and the keyboard, which WASI has no concept of.
-    //!
-    //! All the unsafe is here. Declaring an import and calling it are both
-    //! unsafe, and wrapping them once keeps the rest of the program safe.
-    #![expect(
-        unsafe_code,
-        reason = "a wasm import can only be declared and called unsafely"
-    )]
-
-    #[link(wasm_import_module = "tty")]
-    unsafe extern "C" {
-        fn cols() -> u32;
-        fn rows() -> u32;
-        fn put(x: u32, y: u32, ch: u32, fg: u32, bg: u32);
-        fn clear();
-        fn key() -> i32;
-    }
-
-    /// A count of cells, which is always small enough to say exactly.
-    fn count(value: u32) -> usize {
-        usize::try_from(value).unwrap_or(0)
-    }
-
-    /// A cell index, back the other way. Out of range saturates, and the host
-    /// ignores anything off the screen.
-    fn at(value: usize) -> u32 {
-        u32::try_from(value).unwrap_or(u32::MAX)
-    }
-
-    pub fn width() -> usize {
-        // SAFETY: the host provides this. A module asking for an import it does
-        // not provide fails to instantiate rather than linking to nothing.
-        count(unsafe { cols() })
-    }
-
-    pub fn height() -> usize {
-        // SAFETY: the host provides this. A module asking for an import it does
-        // not provide fails to instantiate rather than linking to nothing.
-        count(unsafe { rows() })
-    }
-
-    pub fn wipe() {
-        // SAFETY: the host provides this. A module asking for an import it does
-        // not provide fails to instantiate rather than linking to nothing.
-        unsafe { clear() };
-    }
-
-    /// Draws one cell. Out of range is the host's problem, and it ignores it.
-    pub fn draw(x: usize, y: usize, ch: char, fg: u8) {
-        // SAFETY: the host provides this. A module asking for an import it does
-        // not provide fails to instantiate rather than linking to nothing.
-        unsafe { put(at(x), at(y), u32::from(ch), u32::from(fg), 0) };
-    }
-
-    /// The next key as a byte, or `None` when nothing is waiting.
-    pub fn pressed() -> Option<u8> {
-        // SAFETY: the host provides this. A module asking for an import it does
-        // not provide fails to instantiate rather than linking to nothing.
-        match unsafe { key() } {
-            -1 => None,
-            byte => u8::try_from(byte).ok(),
-        }
-    }
-}
+use guest::{Key, Keys, tty};
 
 const STARS: usize = 240;
 
@@ -114,6 +50,7 @@ fn scatter(width: f32, height: f32) -> Star {
 struct Field {
     stars: Vec<Star>,
     paused: bool,
+    keys: Keys,
 }
 
 impl Field {
@@ -121,15 +58,16 @@ impl Field {
         Self {
             stars: Vec::new(),
             paused: false,
+            keys: Keys::new(),
         }
     }
 
     /// Returns whether it is time to stop.
-    fn keys(&mut self) -> bool {
-        while let Some(byte) = tty::pressed() {
-            match byte {
-                b'q' | b'Q' => return true,
-                b' ' => self.paused = !self.paused,
+    fn input(&mut self) -> bool {
+        while let Some(key) = self.keys.read() {
+            match key {
+                Key::Byte(b'q' | b'Q') => return true,
+                Key::Byte(b' ') => self.paused = !self.paused,
                 _ => {}
             }
         }
@@ -165,7 +103,7 @@ impl Field {
                 }
             }
             if star.y < height {
-                tty::draw(cell(star.x), cell(star.y), glyph, colour);
+                tty::draw(cell(star.x), cell(star.y), glyph, colour, 0);
             }
         }
     }
@@ -186,7 +124,7 @@ thread_local! {
 #[unsafe(no_mangle)]
 pub extern "C" fn frame(elapsed: f32) -> i32 {
     FIELD.with_borrow_mut(|field| {
-        if field.keys() {
+        if field.input() {
             return 1;
         }
         field.draw(elapsed);

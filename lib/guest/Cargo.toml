@@ -1,17 +1,13 @@
 [package]
-name = "life"
+name = "guest"
 version = "0.0.0"
-description = "Conway's game of life, as a wasm guest."
+description = "The screen, keyboard and chrome the programs in bin/ share."
 keywords = ["wasm", "wasi", "terminal"]
 categories = ["command-line-utilities"]
 edition.workspace = true
 readme.workspace = true
 license.workspace = true
 repository.workspace = true
-
-[dependencies]
-fastrand.workspace = true
-guest.workspace = true
 
 [lints]
 workspace = true

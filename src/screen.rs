@@ -7,12 +7,13 @@
 //! them into actual colours, so a program follows `theme` without knowing
 //! themes exist.
 
-/// The sixteen colours a terminal has.
-pub const COLORS: usize = 16;
+/// The sixteen colours a terminal has. Not public: a program says which one it
+/// wants by number, through `tty::put`, and never names these.
+const COLORS: usize = 16;
 
 /// Default foreground and background, as indices into that set.
-pub const FG: u8 = 7;
-pub const BG: u8 = 0;
+const FG: u8 = 7;
+const BG: u8 = 0;
 
 /// One character and the colours it is drawn in.
 #[derive(Clone, Copy, PartialEq, Eq)]

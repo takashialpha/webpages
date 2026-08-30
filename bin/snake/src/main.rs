@@ -9,57 +9,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
-mod tty {
-    //! The screen and the keyboard, which WASI has no concept of.
-    //!
-    //! All the unsafe is here. Declaring an import and calling it are both
-    //! unsafe, and wrapping them once keeps the rest of the program safe.
-    #![expect(
-        unsafe_code,
-        reason = "a wasm import can only be declared and called unsafely"
-    )]
-
-    #[link(wasm_import_module = "tty")]
-    unsafe extern "C" {
-        fn cols() -> u32;
-        fn rows() -> u32;
-        fn put(x: u32, y: u32, ch: u32, fg: u32, bg: u32);
-        fn key() -> i32;
-    }
-
-    fn count(value: u32) -> usize {
-        usize::try_from(value).unwrap_or(0)
-    }
-
-    fn at(value: usize) -> u32 {
-        u32::try_from(value).unwrap_or(u32::MAX)
-    }
-
-    pub fn width() -> usize {
-        // SAFETY: the host provides this. A module asking for an import it does
-        // not provide fails to instantiate rather than linking to nothing.
-        count(unsafe { cols() })
-    }
-
-    pub fn height() -> usize {
-        // SAFETY: as above.
-        count(unsafe { rows() })
-    }
-
-    pub fn draw(x: usize, y: usize, ch: char, fg: u8, bg: u8) {
-        // SAFETY: as above. Off-screen coordinates are ignored by the host.
-        unsafe { put(at(x), at(y), u32::from(ch), u32::from(fg), u32::from(bg)) };
-    }
-
-    /// The next key as a byte, or `None` when nothing is waiting.
-    pub fn pressed() -> Option<u8> {
-        // SAFETY: as above.
-        match unsafe { key() } {
-            -1 => None,
-            byte => u8::try_from(byte).ok(),
-        }
-    }
-}
+use guest::{Key, Keys, half, line, status, tty};
 
 /// Milliseconds a step lasts, before and after growing.
 const START: f32 = 130.0;
@@ -70,11 +20,13 @@ const HEAD: u8 = 15;
 const FOOD: u8 = 11;
 const DEAD: u8 = 9;
 const FRAME: u8 = 8;
-const BAR_FG: u8 = 0;
-const BAR_BG: u8 = 7;
 
 /// Rows the frame and the status bar take, leaving the rest to play in.
 const CHROME: usize = 3;
+
+/// Most steps one frame will catch up on, so a backgrounded tab does not come
+/// back and run every step it missed at once.
+const CATCHUP: usize = 4;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Point {
@@ -103,15 +55,6 @@ impl Way {
     }
 }
 
-/// Where we are in an escape sequence. Arrows arrive as `esc [ A`, and without
-/// tracking that, a typed `A` would steer.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Reading {
-    Plain,
-    Escaped,
-    Bracket,
-}
-
 struct Game {
     snake: VecDeque<Point>,
     heading: Way,
@@ -125,7 +68,7 @@ struct Game {
     score: u32,
     best: u32,
     dead: bool,
-    reading: Reading,
+    keys: Keys,
 }
 
 impl Game {
@@ -141,7 +84,7 @@ impl Game {
             score: 0,
             best: 0,
             dead: false,
-            reading: Reading::Plain,
+            keys: Keys::new(),
         }
     }
 
@@ -160,7 +103,7 @@ impl Game {
     fn restart(&mut self) {
         (self.cols, self.rows) = Self::shape();
         self.snake.clear();
-        self.reading = Reading::Plain;
+        self.keys.forget();
         if self.cols < 8 || self.rows < 8 {
             return;
         }
@@ -253,45 +196,27 @@ impl Game {
         (START - eaten * 2.0).max(FASTEST)
     }
 
-    /// Returns whether it is time to stop.
-    fn keys(&mut self) -> bool {
-        while let Some(byte) = tty::pressed() {
-            self.reading = match (self.reading, byte) {
-                (Reading::Plain, 0x1b) => Reading::Escaped,
-                (Reading::Escaped, b'[') => Reading::Bracket,
-                // The letter after `esc [` is the arrow.
-                (Reading::Bracket, letter) => {
-                    match letter {
-                        b'A' => self.turn(Way::Up),
-                        b'B' => self.turn(Way::Down),
-                        b'C' => self.turn(Way::Right),
-                        b'D' => self.turn(Way::Left),
-                        _ => {}
-                    }
-                    Reading::Plain
-                }
-                (_, letter) => {
-                    match letter {
-                        b'q' | b'Q' => return true,
-                        b'r' | b'R' => self.restart(),
-                        b' ' if self.dead => self.restart(),
-                        b'w' | b'W' => self.turn(Way::Up),
-                        b's' | b'S' => self.turn(Way::Down),
-                        b'a' | b'A' => self.turn(Way::Left),
-                        b'd' | b'D' => self.turn(Way::Right),
-                        _ => {}
-                    }
-                    Reading::Plain
-                }
-            };
-        }
-        false
-    }
-
     const fn turn(&mut self, way: Way) {
         if !way.reverses(self.heading) {
             self.turning = way;
         }
+    }
+
+    /// Returns whether it is time to stop.
+    fn input(&mut self) -> bool {
+        while let Some(key) = self.keys.read() {
+            match key {
+                Key::Up | Key::Byte(b'w' | b'W') => self.turn(Way::Up),
+                Key::Down | Key::Byte(b's' | b'S') => self.turn(Way::Down),
+                Key::Left | Key::Byte(b'a' | b'A') => self.turn(Way::Left),
+                Key::Right | Key::Byte(b'd' | b'D') => self.turn(Way::Right),
+                Key::Byte(b'q' | b'Q') => return true,
+                Key::Byte(b'r' | b'R') => self.restart(),
+                Key::Byte(b' ') if self.dead => self.restart(),
+                Key::Byte(_) => {}
+            }
+        }
+        false
     }
 
     /// What is in each cell, laid out once so drawing does not search the
@@ -321,74 +246,35 @@ impl Game {
         // So the wall you can die against is one you can see.
         let rule = "─".repeat(self.cols);
         let bottom = tty::height().saturating_sub(2);
-        line(0, &format!("┌{rule}┐"), FRAME);
-        line(bottom, &format!("└{rule}┘"), FRAME);
+        line(0, 0, &format!("┌{rule}┐"), FRAME);
+        line(0, bottom, &format!("└{rule}┘"), FRAME);
 
         for cy in 0..self.rows / 2 {
             let row = cy + 1;
             tty::draw(0, row, '│', FRAME, 0);
             for x in 0..self.cols {
                 // The upper half is the smaller `y`, since `y` counts down.
-                let (upper, lower) = (at(x, cy * 2), at(x, cy * 2 + 1));
-                match (upper, lower) {
-                    (None, None) => tty::draw(x + 1, row, ' ', 0, 0),
-                    (Some(colour), None) => tty::draw(x + 1, row, '▀', colour, 0),
-                    (None, Some(colour)) => tty::draw(x + 1, row, '▄', colour, 0),
-                    // Two colours in one character: the lower half becomes the
-                    // background, so both show.
-                    (Some(up), Some(down)) => tty::draw(x + 1, row, '▀', up, down),
-                }
+                half(x + 1, row, at(x, cy * 2), at(x, cy * 2 + 1));
             }
             tty::draw(self.cols + 1, row, '│', FRAME, 0);
         }
-        self.status();
-    }
 
-    fn status(&self) {
-        let row = tty::height().saturating_sub(1);
-        let width = tty::width();
-
-        let left: Vec<char> = format!(
-            " snake │ {} │ best {} │{}",
-            self.score,
-            self.best,
-            if self.dead { " dead │" } else { "" },
-        )
-        .chars()
-        .collect();
-
-        let mut hints = if self.dead {
-            vec!["space: again", "q: quit"]
+        // Least useful first, since that is the order they are dropped in on a
+        // narrow screen.
+        let hints: &[&str] = if self.dead {
+            &["space: again", "q: quit"]
         } else {
-            vec!["r: restart", "arrows or wasd", "q: quit"]
+            &["r: restart", "arrows or wasd", "q: quit"]
         };
-        let right = loop {
-            let right: Vec<char> = format!("│ {} ", hints.join(" │ ")).chars().collect();
-            if hints.len() == 1 || left.len() + right.len() <= width {
-                break right;
-            }
-            hints.remove(0);
-        };
-
-        let start = width.saturating_sub(right.len());
-        let room = left.len() <= start;
-        for x in 0..width {
-            let ch = if x < left.len() {
-                left[x]
-            } else if room && x >= start {
-                right[x - start]
-            } else {
-                ' '
-            };
-            tty::draw(x, row, ch, BAR_FG, BAR_BG);
-        }
-    }
-}
-
-/// One row of text, from the left edge.
-fn line(row: usize, text: &str, colour: u8) {
-    for (x, ch) in text.chars().enumerate() {
-        tty::draw(x, row, ch, colour, 0);
+        status(
+            &format!(
+                " snake │ {} │ best {} │{}",
+                self.score,
+                self.best,
+                if self.dead { " dead │" } else { "" },
+            ),
+            hints,
+        );
     }
 }
 
@@ -399,12 +285,13 @@ thread_local! {
 /// Called once a frame by the terminal, which owns the loop. Non-zero quits.
 ///
 /// The name has to survive mangling for the host to find it, and saying so is
-/// itself unsafe.
+/// itself unsafe. Nothing else here exports a symbol, so there is nothing for
+/// it to collide with.
 #[expect(unsafe_code, reason = "the host looks this up by name")]
 #[unsafe(no_mangle)]
 pub extern "C" fn frame(elapsed: f32) -> i32 {
     GAME.with_borrow_mut(|game| {
-        if game.keys() {
+        if game.input() {
             return 1;
         }
         if !game.fits() {
@@ -416,9 +303,7 @@ pub extern "C" fn frame(elapsed: f32) -> i32 {
 
         game.due += elapsed;
         let pace = game.pace();
-        // Bounded, so a backgrounded tab does not come back and run every
-        // step it missed at once.
-        for _ in 0..4 {
+        for _ in 0..CATCHUP {
             if game.due < pace {
                 break;
             }

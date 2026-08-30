@@ -9,66 +9,7 @@
 
 use std::cell::RefCell;
 
-mod tty {
-    //! The screen and the keyboard, which WASI has no concept of.
-    //!
-    //! All the unsafe is here. Declaring an import and calling it are both
-    //! unsafe, and wrapping them once keeps the rest of the program safe.
-    #![expect(
-        unsafe_code,
-        reason = "a wasm import can only be declared and called unsafely"
-    )]
-
-    #[link(wasm_import_module = "tty")]
-    unsafe extern "C" {
-        fn cols() -> u32;
-        fn rows() -> u32;
-        fn put(x: u32, y: u32, ch: u32, fg: u32, bg: u32);
-        fn key() -> i32;
-    }
-
-    /// A count of cells, which is always small enough to say exactly.
-    fn count(value: u32) -> usize {
-        usize::try_from(value).unwrap_or(0)
-    }
-
-    /// A cell index, back the other way. Out of range saturates, and the host
-    /// ignores anything off the screen.
-    fn at(value: usize) -> u32 {
-        u32::try_from(value).unwrap_or(u32::MAX)
-    }
-
-    pub fn width() -> usize {
-        // SAFETY: the host provides this. A module asking for an import it does
-        // not provide fails to instantiate rather than linking to nothing.
-        count(unsafe { cols() })
-    }
-
-    pub fn height() -> usize {
-        // SAFETY: the host provides this. A module asking for an import it does
-        // not provide fails to instantiate rather than linking to nothing.
-        count(unsafe { rows() })
-    }
-
-    /// Draws one cell. Out of range is the host's problem, and it ignores it.
-    pub fn draw(x: usize, y: usize, ch: char, fg: u8, bg: u8) {
-        // SAFETY: the host provides this. A module asking for an import it does
-        // not provide fails to instantiate rather than linking to nothing.
-        unsafe {
-            put(at(x), at(y), u32::from(ch), u32::from(fg), u32::from(bg));
-        }
-    }
-
-    /// The next key as a byte, or `None` when nothing is waiting.
-    pub fn pressed() -> Option<u8> {
-        // SAFETY: the host provides this. A module asking for an import it does
-        // not provide fails to instantiate rather than linking to nothing.
-        match unsafe { key() } {
-            -1 => None,
-            byte => u8::try_from(byte).ok(),
-        }
-    }
-}
+use guest::{Key, Keys, half, status, tty};
 
 /// Percent of cells alive in a fresh world.
 const DENSITY: u8 = 28;
@@ -81,10 +22,8 @@ const CATCHUP: usize = 4;
 const SPEEDS: [f32; 7] = [480.0, 240.0, 120.0, 60.0, 30.0, 16.0, 8.0];
 const NORMAL: usize = 2;
 
-/// The colour live cells are drawn in, and the two the status bar uses.
+/// The colour live cells are drawn in.
 const LIVE: u8 = 10;
-const BAR_FG: u8 = 0;
-const BAR_BG: u8 = 7;
 
 struct Life {
     cells: Vec<bool>,
@@ -94,6 +33,7 @@ struct Life {
     paused: bool,
     speed: usize,
     generation: u64,
+    keys: Keys,
 }
 
 impl Life {
@@ -106,6 +46,7 @@ impl Life {
             paused: false,
             speed: NORMAL,
             generation: 0,
+            keys: Keys::new(),
         }
     }
 
@@ -129,7 +70,8 @@ impl Life {
     /// Neighbours, on a grid that wraps: a glider runs off one edge and back
     /// in the other, which is better to watch than one dying at a wall. The
     /// offsets are added rather than subtracted to keep the arithmetic
-    /// unsigned.
+    /// unsigned, which is why this needs a world with something in it. Only
+    /// [`Life::step`] calls it, and that checks.
     fn neighbours(&self, x: usize, y: usize) -> u8 {
         let mut count = 0;
         for dy in [self.rows - 1, 0, 1] {
@@ -163,89 +105,48 @@ impl Life {
 
     fn draw(&self) {
         // Two world rows to a character row: the upper half block is the even
-        // row and the lower half the odd one, so a full block, either half, or
-        // nothing covers every case.
+        // row and the lower half the odd one.
         for cy in 0..self.rows / 2 {
             for x in 0..self.cols {
-                let top = self.cells[(cy * 2) * self.cols + x];
-                let bottom = self.cells[(cy * 2 + 1) * self.cols + x];
-                let ch = match (top, bottom) {
-                    (true, true) => '█',
-                    (true, false) => '▀',
-                    (false, true) => '▄',
-                    (false, false) => ' ',
-                };
-                tty::draw(x, cy, ch, LIVE, 0);
+                let upper = self.cells[cy * 2 * self.cols + x].then_some(LIVE);
+                let lower = self.cells[(cy * 2 + 1) * self.cols + x].then_some(LIVE);
+                half(x, cy, upper, lower);
             }
         }
-        self.status();
-    }
-
-    /// A status bar, the way a full screen program has one: what this is on
-    /// the left, what the keys do on the right, reverse video across.
-    fn status(&self) {
-        let row = tty::height().saturating_sub(1);
-        let width = tty::width();
-
-        // Both halves close with a separator, so the space between reads as a
-        // gap in one bar rather than two loose ends.
-        let left: Vec<char> = format!(
-            " life │ gen {} │ {}×{} │ {} │",
-            compact(self.generation),
-            self.cols,
-            self.rows,
-            if self.paused {
-                "paused".to_owned()
-            } else {
-                format!("{:.0}ms", SPEEDS[self.speed])
-            },
-        )
-        .chars()
-        .collect();
 
         // Named by what the key would do next: space toggles, so it offers
-        // whichever it is not.
+        // whichever it is not. Least useful first, since that is the order they
+        // are dropped in on a narrow screen.
         let toggle = if self.paused {
             "space: resume"
         } else {
             "space: pause"
         };
-        // Least useful first, which is the order they are dropped in when the
-        // screen is too narrow for all of them.
-        let mut hints = vec!["r: seed", "[ ]: speed", toggle, "q: quit"];
-
-        let right = loop {
-            let right: Vec<char> = format!("│ {} ", hints.join(" │ ")).chars().collect();
-            if hints.len() == 1 || left.len() + right.len() <= width {
-                break right;
-            }
-            hints.remove(0);
-        };
-        // Even one may not fit, and half a word is worse than none.
-        let start = width.saturating_sub(right.len());
-        let room = left.len() <= start;
-
-        for x in 0..width {
-            let ch = if x < left.len() {
-                left[x]
-            } else if room && x >= start {
-                right[x - start]
-            } else {
-                ' '
-            };
-            tty::draw(x, row, ch, BAR_FG, BAR_BG);
-        }
+        status(
+            &format!(
+                " life │ gen {} │ {}×{} │ {} │",
+                compact(self.generation),
+                self.cols,
+                self.rows,
+                if self.paused {
+                    "paused".to_owned()
+                } else {
+                    format!("{:.0}ms", SPEEDS[self.speed])
+                },
+            ),
+            &["r: seed", "[ ]: speed", toggle, "q: quit"],
+        );
     }
 
     /// Returns whether it is time to stop.
-    fn keys(&mut self) -> bool {
-        while let Some(byte) = tty::pressed() {
-            match byte {
-                b'q' | b'Q' => return true,
-                b' ' => self.paused = !self.paused,
-                b'r' | b'R' => self.scatter(),
-                b'[' => self.speed = self.speed.saturating_sub(1),
-                b']' => self.speed = (self.speed + 1).min(SPEEDS.len() - 1),
+    fn input(&mut self) -> bool {
+        while let Some(key) = self.keys.read() {
+            match key {
+                Key::Byte(b'q' | b'Q') => return true,
+                Key::Byte(b' ') => self.paused = !self.paused,
+                Key::Byte(b'r' | b'R') => self.scatter(),
+                Key::Byte(b'[') => self.speed = self.speed.saturating_sub(1),
+                Key::Byte(b']') => self.speed = (self.speed + 1).min(SPEEDS.len() - 1),
                 _ => {}
             }
         }
@@ -301,7 +202,7 @@ thread_local! {
 #[unsafe(no_mangle)]
 pub extern "C" fn frame(elapsed: f32) -> i32 {
     WORLD.with_borrow_mut(|world| {
-        if world.keys() {
+        if world.input() {
             return 1;
         }
         // A resize changes the world, so it starts again rather than pretend

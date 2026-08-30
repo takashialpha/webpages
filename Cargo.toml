@@ -1,15 +1,17 @@
 [workspace]
-# The site, and the programs it serves. A glob, so adding a program is making
-# its directory and nothing else.
-members = [".", "bin/*"]
+# The site, the programs it serves, and what those share. Globbed, so adding a
+# program is making its directory under `bin/` and nothing else.
+members = [".", "bin/*", "lib/*"]
 # A guest is a `wasm32-wasip1` binary and will not link for the host, so a
 # plain `cargo build` must not try. Ask for one with `just guests`.
 default-members = ["."]
 
-# Every guest wants an unplanned pattern, not cryptography. Named once here so
-# the version is in one place.
+# What the programs in `bin/` are built from. `guest` is the screen, the
+# keyboard and the chrome they share; `fastrand` is because every one of them
+# wants an unplanned pattern and none of them wants cryptography.
 [workspace.dependencies]
 fastrand = "2"
+guest = { path = "lib/guest" }
 
 [workspace.package]
 edition = "2024"
@@ -61,14 +63,15 @@ leptos_meta = { version = "0" }
 linkify = { version = "0" }
 # What the server binary uses directly: `fs` writes the board, `macros` is
 # `#[tokio::main]` and `select!`, `net` is `TcpListener`, `signal` is the
-# shutdown. Spelled out rather than inherited from axum's feature set, which is
-# not ours to depend on.
+# shutdown, `sync` is the lock that keeps board writes in order. Spelled out
+# rather than inherited from axum's feature set, which is not ours to depend on.
 tokio = { version = "1", features = [
   "fs",
   "macros",
   "net",
   "rt-multi-thread",
   "signal",
+  "sync",
 ], optional = true }
 # `date` wants one format and no time zones: the calendar and the formatter,
 # no parsing and no tzdb.

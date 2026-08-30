@@ -658,6 +658,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17e2ac29387b1aa07a1e448f7bb4f35b500787971e965b02842b900afa5c8f6f"
 
 [[package]]
+name = "guest"
+version = "0.0.0"
+
+[[package]]
 name = "h2"
 version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1210,6 +1214,7 @@ name = "life"
 version = "0.0.0"
 dependencies = [
  "fastrand",
+ "guest",
 ]
 
 [[package]]
@@ -2001,6 +2006,7 @@ name = "snake"
 version = "0.0.0"
 dependencies = [
  "fastrand",
+ "guest",
 ]
 
 [[package]]
@@ -2039,6 +2045,7 @@ name = "stars"
 version = "0.0.0"
 dependencies = [
  "fastrand",
+ "guest",
 ]
 
 [[package]]
@@ -2129,6 +2136,7 @@ name = "tetris"
 version = "0.0.0"
 dependencies = [
  "fastrand",
+ "guest",
 ]
 
 [[package]]

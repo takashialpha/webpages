@@ -21,9 +21,17 @@ pub fn track(on_change: impl Fn() + 'static) {
     use wasm_bindgen::closure::Closure;
     use wasm_bindgen::prelude::JsValue;
 
+    // First, because it matters even on a browser with no visual viewport to
+    // measure: the console font swaps in after the first paint, so a cell
+    // measured before it lands is the fallback's, not its.
+    if let Ok(ready) = leptos::prelude::document().fonts().ready() {
+        let arrived = Closure::<dyn FnMut(JsValue)>::new(|_| forget_cell_size());
+        let _ = ready.then(&arrived);
+        arrived.forget();
+    }
+
     // Every browser this targets has one. Without it the stylesheet keeps its
     // `100dvh` fallback, which is what the page would have done anyway.
-
     let Some(viewport) = leptos::prelude::window().visual_viewport() else {
         return;
     };
@@ -67,14 +75,6 @@ pub fn track(on_change: impl Fn() + 'static) {
     let _ = viewport.add_event_listener_with_callback("scroll", scrolled.as_ref().unchecked_ref());
     resized.forget();
     scrolled.forget();
-
-    // The console font swaps in after the first paint, so a cell measured
-    // before it lands is the fallback's, not its.
-    if let Ok(ready) = leptos::prelude::document().fonts().ready() {
-        let arrived = Closure::<dyn FnMut(JsValue)>::new(|_| forget_cell_size());
-        let _ = ready.then(&arrived);
-        arrived.forget();
-    }
 }
 
 /// The server has no viewport. Here so the module still compiles into it.

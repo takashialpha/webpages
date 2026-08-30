@@ -34,8 +34,6 @@ pub struct Listing {
     pub name: &'static str,
     pub summary: &'static str,
     pub spec: crate::args::Spec,
-    /// Where the code is, relative to the page.
-    pub url: &'static str,
 }
 
 impl Listing {
@@ -53,29 +51,74 @@ pub const LIFE: Listing = Listing {
     name: "life",
     summary: "conway's game of life",
     spec: crate::args::Spec::NONE,
-    url: "bin/life.wasm",
 };
 
 pub const SNAKE: Listing = Listing {
     name: "snake",
     summary: "eat, grow, do not bite yourself",
     spec: crate::args::Spec::NONE,
-    url: "bin/snake.wasm",
 };
 
 pub const TETRIS: Listing = Listing {
     name: "tetris",
     summary: "stack the falling blocks",
     spec: crate::args::Spec::NONE,
-    url: "bin/tetris.wasm",
 };
 
 pub const STARS: Listing = Listing {
     name: "stars",
     summary: "a drifting starfield",
     spec: crate::args::Spec::NONE,
-    url: "bin/stars.wasm",
 };
+
+/// The manifest `just guests` writes beside the programs: one `name: hash`
+/// line each.
+///
+/// Read once at startup and stamped onto the document, which is how the
+/// browser gets it. The names cannot be baked in: the site has to compile
+/// without the programs having been built, or `just check` would have to build
+/// them first. Same trick as `data-uname`.
+///
+/// Empty when there is no manifest, which leaves [`url`] naming them plainly.
+#[cfg(not(feature = "hydrate"))]
+#[must_use]
+pub fn manifest(site_root: &str) -> String {
+    use std::sync::OnceLock;
+
+    static MANIFEST: OnceLock<String> = OnceLock::new();
+    MANIFEST
+        .get_or_init(|| {
+            std::fs::read_to_string(std::path::Path::new(site_root).join("bin").join("hash.txt"))
+                .unwrap_or_default()
+        })
+        .clone()
+}
+
+/// Reads back what the server stamped, so the browser asks for the same names.
+#[cfg(feature = "hydrate")]
+#[must_use]
+pub fn manifest(_site_root: &str) -> String {
+    leptos::prelude::document()
+        .document_element()
+        .and_then(|html| html.get_attribute("data-programs"))
+        .unwrap_or_default()
+}
+
+/// Where a program's code is, relative to the page, with its content hash in
+/// the name.
+///
+/// Falls back to the plain name when there is no manifest, which is a build
+/// that skipped `just guests`. That 404s when the program is run, and says so.
+#[must_use]
+pub fn url(listing: &Listing) -> String {
+    manifest("")
+        .lines()
+        .find_map(|line| {
+            let hash = line.strip_prefix(listing.name)?.strip_prefix(": ")?;
+            Some(format!("bin/{}.{}.wasm", listing.name, hash.trim()))
+        })
+        .unwrap_or_else(|| format!("bin/{}.wasm", listing.name))
+}
 
 /// What `~/bin` holds.
 pub const BIN: &[crate::fs::Entry] = &[

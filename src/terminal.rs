@@ -1,12 +1,25 @@
-//! The interactive terminal: scrollback, prompt, history, and completion.
+//! The interactive terminal.
+//!
+//! This is the component and the keyboard. What it is made of sits beside it:
+//! `render.rs` turns output into markup, `editor.rs` is the line you are
+//! typing, and `alt.rs` is the screen a program takes and the loop that drives
+//! it. All three are `Copy` handles or plain functions, so the handlers here
+//! can hold them without ceremony.
 
 use leptos::ev::KeyboardEvent;
 use leptos::html;
 use leptos::prelude::*;
 
-use crate::program::{self, Program, Step};
-use crate::screen::{Run, Screen};
-use crate::shell::{self, Line, Output, Session, Sink, Span};
+mod alt;
+mod editor;
+mod render;
+
+use alt::Alt;
+use editor::Editor;
+use render::{farewell, prompt_view, render_output};
+
+use crate::program;
+use crate::shell::{self, Output, Session, Sink, Span};
 
 /// One executed command and whatever it printed.
 #[derive(Clone)]
@@ -17,23 +30,6 @@ struct Entry {
     input: String,
     /// A signal, because a command may answer later.
     output: RwSignal<Output>,
-}
-
-/// The prompt, built the same way everywhere it appears.
-///
-/// Split into elements so no text node looks like an email address, which
-/// Cloudflare rewrites. Both prompts have to split the same way: each inline
-/// box rounds on its own, so the same text in one box and in four lands a
-/// sixteenth of a pixel apart, and the line shifts when you press Enter.
-fn prompt_view(tail: impl IntoView + 'static) -> impl IntoView {
-    view! {
-        <span class="prompt">
-            <span>{crate::USER}</span>
-            "@"
-            <span>{crate::site_host()}</span>
-            {tail}
-        </span>
-    }
 }
 
 /// Whether anything is selected. `ctrl-c` copies if so, interrupts if not.
@@ -53,10 +49,6 @@ const fn selecting() -> bool {
     false
 }
 
-/// The frame loop, kept so it can schedule itself. Shared because it outlives
-/// the call that set it up and has to be reachable from the frame it asked for.
-type Tick = std::rc::Rc<dyn Fn(f64)>;
-
 /// How many whole cells fit into a span of pixels.
 #[expect(
     clippy::cast_possible_truncation,
@@ -70,146 +62,54 @@ fn fits(span: f64, cell: f64) -> usize {
     (span / cell).floor().clamp(1.0, 4096.0) as usize
 }
 
-/// What `exit` prints before the session goes quiet. The personal line is in
-/// `content/logout.txt`, so rewording it is not a code change.
-fn farewell() -> Output {
-    const GOODBYE: &str = include_str!("../content/logout.txt");
-
-    Output::Lines(vec![
-        vec![Span::plain("logout")],
-        vec![Span::plain(GOODBYE.trim_end())],
-        vec![Span::new(
-            format!("Connection to {} closed.", crate::site_host()),
-            "dim",
-        )],
-    ])
-}
-
-/// One line of output. Link spans become real anchors, the one thing here you
-/// click rather than type.
-fn render_line(line: &Line) -> AnyView {
-    line.iter()
-        .map(|span| {
-            if span.class == "link" {
-                view! {
-                    <a href=span.text.clone() target="_blank" rel="noreferrer">
-                        {span.text.clone()}
-                    </a>
-                }
-                .into_any()
-            } else {
-                view! { <span class=span.class>{span.text.clone()}</span> }.into_any()
-            }
-        })
-        .collect_view()
-        .into_any()
-}
-
-fn render_output(output: &Output) -> AnyView {
-    match *output {
-        Output::Lines(ref lines) => lines
-            .iter()
-            .map(|line| view! { <p class="line">{render_line(line)}</p> })
-            .collect_view()
-            .into_any(),
-        Output::Wide(ref lines) => view! {
-            <div class="wide">
-                {lines
-                    .iter()
-                    .map(|line| view! { <p class="line">{render_line(line)}</p> })
-                    .collect_view()}
-            </div>
-        }
-        .into_any(),
-        Output::Columns(ref lines) => view! {
-            <div class="cols">
-                {lines
-                    .iter()
-                    .map(|line| view! { <span class="line">{render_line(line)}</span> })
-                    .collect_view()}
-            </div>
-        }
-        .into_any(),
-        // Pending never gets here: the entry holds `Nothing` until its task
-        // answers, and the task writes one of the arms above.
-        Output::Pending(_) | Output::Run(_) | Output::Clear | Output::Exit | Output::Nothing => {
-            ().into_any()
-        }
-    }
-}
-
 #[component]
 pub fn Terminal(children: Children) -> impl IntoView {
     let session = RwSignal::new(Session::new());
     let scrollback = RwSignal::new(Vec::<Entry>::new());
-    let input = RwSignal::new(String::new());
-    let history = RwSignal::new(Vec::<String>::new());
-    // `None` means "editing a fresh line"; otherwise an index into `history`.
-    let recalled = RwSignal::new(Option::<usize>::None);
     // `clear` takes the banner with it, the way clearing a real screen would.
     let banner = RwSignal::new(true);
     // Set by `exit`. The prompt goes away and nothing else is read.
     let closed = RwSignal::new(false);
-    // Where the caret is, in cells. Fixed width font, so the column is just
-    // the offset: nothing to measure, and it stays right after an arrow key.
-    let column = RwSignal::new(0_usize);
-    // The first column shown, once a line outgrows the field. Whole columns:
-    // an input scrolls by pixels and stops mid-character, which a terminal
-    // never does. Its own text is not drawn, so only this matters.
-    let scrolled = RwSignal::new(0_usize);
 
     let input_ref = NodeRef::<html::Input>::new();
     let screen_ref = NodeRef::<html::Div>::new();
     let tty_ref = NodeRef::<html::Main>::new();
 
-    // The running program and its screen. Local, because neither is `Send` and
-    // a browser has one thread anyway.
-    let running = StoredValue::new_local(None::<Box<dyn Program>>);
-    let screen = StoredValue::new_local(Screen::new(0, 0));
-    // One signal per row, so a frame rewrites only the rows that changed.
-    let rows = RwSignal::new(Vec::<RwSignal<Vec<Run>>>::new());
-    let alt = RwSignal::new(false);
+    // The line being typed, the caret in it, and the lines before it. See
+    // editor.rs.
+    let line = Editor::new(input_ref);
 
     // Only the path moves, so this is all that is ever rebuilt and all an
     // echoed line has to remember.
     let prompt_tail = move || format!(":{}$", session.get().prompt_path());
 
-    let focus_input = move || {
-        if let Some(element) = input_ref.get() {
-            let _ = element.focus();
+    // How many cells fit, measured rather than assumed.
+    let measure = move || {
+        // The terminal, not the scrollback inside it: that is out of sight
+        // while a program runs. The alternate screen fills this box exactly.
+        let Some(host) = tty_ref.get_untracked() else {
+            return (80, 24);
+        };
+        let width = f64::from(host.client_width());
+        let height = f64::from(host.client_height());
+        // The font is 8 by 16 and the stylesheet only ever doubles it, so a
+        // cell is half as wide as it is tall. Measuring is what keeps that true
+        // at either breakpoint.
+        let cell = crate::viewport::cell_size();
+        if cell.0 <= 0.0 || cell.1 <= 0.0 {
+            return (80, 24);
         }
+        (fits(width, cell.0), fits(height, cell.1))
     };
 
-    // Read the caret back after anything that could have moved it. Writes only
-    // on a change, since a held key comes through on every repeat.
-    let sync_column = move || {
-        if let Some(element) = input_ref.get()
-            && let Ok(Some(at)) = element.selection_start()
-        {
-            let at = at as usize;
-            if column.get_untracked() != at {
-                column.set(at);
-            }
-            // Only when the caret would leave the field, and then by whole
-            // columns.
-            let cell = crate::viewport::cell_size().0;
-            let visible = fits(f64::from(element.client_width()), cell);
-            let mut offset = scrolled.get_untracked();
-            if at < offset {
-                offset = at;
-            } else if at >= offset + visible {
-                offset = at + 1 - visible;
-            }
-            if scrolled.get_untracked() != offset {
-                scrolled.set(offset);
-            }
-        }
-    };
+    // A program takes the whole screen; this is the screen it takes and the
+    // loop that drives it. See alt.rs.
+    let alt = Alt::new(measure, move || line.focus());
 
     // Focus on mount, so you can type without clicking first. On touch this
     // only arms the input: the keyboard still needs a tap, which no browser
     // will skip.
-    Effect::new(move |_| focus_input());
+    Effect::new(move |_| line.focus());
 
     // A Safari attribute with no typed setter in leptos. Without it, ios
     // rewrites commands into prose as you type.
@@ -239,7 +139,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
     // out of sight, which pins it to the top and loses where it was.
     Effect::new(move |_| {
         scrollback.track();
-        alt.track();
+        alt.showing();
         scroll_to_prompt();
     });
 
@@ -278,118 +178,15 @@ pub fn Terminal(children: Children) -> impl IntoView {
         }
     };
 
-    // How many cells fit, measured rather than assumed.
-    let measure = move || {
-        // The terminal, not the scrollback inside it: that is out of sight
-        // while a program runs. The alternate screen fills this box exactly.
-        let Some(host) = tty_ref.get_untracked() else {
-            return (80, 24);
-        };
-        let width = f64::from(host.client_width());
-        let height = f64::from(host.client_height());
-        // The font is 8 by 16 and the stylesheet only ever doubles it, so a
-        // cell is half as wide as it is tall. Measuring is what keeps that true
-        // at either breakpoint.
-        let cell = crate::viewport::cell_size();
-        if cell.0 <= 0.0 || cell.1 <= 0.0 {
-            return (80, 24);
-        }
-        (fits(width, cell.0), fits(height, cell.1))
-    };
-
-    /// Repaints only the rows that changed.
-    #[expect(
-        clippy::items_after_statements,
-        reason = "it belongs beside the loop that calls it"
-    )]
-    fn repaint(screen: &Screen, rows: &[RwSignal<Vec<Run>>]) {
-        for (y, row) in rows.iter().enumerate() {
-            let next = screen.runs(y);
-            if row.with_untracked(|current| *current != next) {
-                row.set(next);
-            }
-        }
-    }
-
-    let leave = move || {
-        running.set_value(None);
-        alt.set(false);
-        rows.set(Vec::new());
-        focus_input();
-    };
-
-    // Owns the clock, calls the program once a frame, and stops the moment it
-    // says it is done or is taken away underneath it.
-    let tick: StoredValue<Option<Tick>, LocalStorage> = StoredValue::new_local(None);
-    let step = move |last: f64| {
-        let Some(run) = tick.get_value() else { return };
-        request_animation_frame(move || run(last));
-    };
-
-    tick.set_value(Some(std::rc::Rc::new(move |last: f64| {
-        if running.with_value(Option::is_none) {
-            return;
-        }
-
-        let now = crate::clock::since_load_millis();
-        let elapsed = if last <= 0.0 { 0.0 } else { now - last };
-
-        let (cols, want_rows) = measure();
-        screen.update_value(|screen| screen.resize(cols, want_rows));
-        rows.update(|rows| {
-            if rows.len() != want_rows {
-                rows.resize_with(want_rows, || RwSignal::new(Vec::new()));
-            }
-        });
-
-        let done = running
-            .try_update_value(|program| {
-                program.as_mut().is_some_and(|program| {
-                    screen
-                        .try_update_value(|screen| {
-                            matches!(program.frame(screen, elapsed), Step::Done)
-                        })
-                        .unwrap_or(true)
-                })
-            })
-            .unwrap_or(true);
-
-        screen.with_value(|screen| rows.with_untracked(|rows| repaint(screen, rows)));
-
-        if done {
-            leave();
-        } else {
-            step(now);
-        }
-    })));
-
-    // Hands the screen to a program ready to draw.
-    let mount = move |mut program: Box<dyn Program>| {
-        let (cols, want_rows) = measure();
-        screen.update_value(|screen| {
-            screen.resize(cols, want_rows);
-            screen.clear();
-        });
-        rows.set((0..want_rows).map(|_| RwSignal::new(Vec::new())).collect());
-        screen.update_value(|screen| program.start(screen));
-        running.set_value(Some(program));
-        alt.set(true);
-        // The input is the keyboard whether it can be seen or not, so it keeps
-        // focus while the program has the screen.
-        focus_input();
-        screen.with_value(|screen| rows.with_untracked(|rows| repaint(screen, rows)));
-        step(0.0);
-    };
-
     // Fetched when it is run, so none of it is in the bundle until then. The
     // entry waits in the scrollback, and says why if it never arrives.
     let launch = move |listing: &'static program::Listing, sink: Sink| {
         leptos::task::spawn_local(async move {
-            match program::open_guest(listing.url).await {
+            match program::open_guest(&program::url(listing)).await {
                 // It draws, so it takes the screen.
                 Ok(program::Opened::Draws(program)) => {
                     sink.set(Output::Nothing);
-                    mount(program);
+                    alt.mount(program);
                 }
                 // It printed and exited, so the entry keeps what it said.
                 Ok(program::Opened::Printed(output)) => sink.set(output),
@@ -399,18 +196,15 @@ pub fn Terminal(children: Children) -> impl IntoView {
     };
 
     let submit = move || {
-        let typed = input.get();
+        let typed = line.text.get();
         let echoed = prompt_tail();
 
         let mut current = session.get();
         let output = shell::run(&mut current, &typed);
         session.set(current);
 
-        if !typed.trim().is_empty() {
-            history.update(|entries| entries.push(typed.clone()));
-        }
-        recalled.set(None);
-        input.set(String::new());
+        line.remember(&typed);
+        line.set(String::new());
 
         match output {
             Output::Clear => {
@@ -435,10 +229,10 @@ pub fn Terminal(children: Children) -> impl IntoView {
     };
 
     let complete = move || {
-        let completion = shell::complete(&session.get(), &input.get());
+        let completion = shell::complete(&session.get(), &line.text.get());
         if !completion.candidates.is_empty() {
             let echoed = prompt_tail();
-            let typed = input.get();
+            let typed = line.text.get();
             let listing = completion
                 .candidates
                 .iter()
@@ -446,53 +240,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
                 .collect();
             record(echoed, typed, Output::Lines(listing));
         }
-        input.set(completion.line);
-    };
-
-    // Up walks back, down walks forward and off the end into a fresh empty
-    // line, which is what a shell does.
-    let recall = move |backwards: bool| {
-        let entries = history.get();
-        if entries.is_empty() {
-            return;
-        }
-        let next = match (recalled.get(), backwards) {
-            (None, true) => Some(entries.len().saturating_sub(1)),
-            (None, false) => None,
-            (Some(index), true) => Some(index.saturating_sub(1)),
-            (Some(index), false) => {
-                if index + 1 < entries.len() {
-                    Some(index + 1)
-                } else {
-                    None
-                }
-            }
-        };
-        recalled.set(next);
-        input.set(
-            next.and_then(|index| entries.get(index).cloned())
-                .unwrap_or_default(),
-        );
-    };
-
-    // Read from the input, not from `column`, which only catches up next frame.
-    let caret = move || {
-        input_ref
-            .get_untracked()
-            .and_then(|element| element.selection_start().ok().flatten())
-            .map_or_else(|| input.get_untracked().len(), |at| at as usize)
-    };
-
-    // Next frame: changing the line rewrites `prop:value` and puts the caret
-    // at the end, so placing it first would be overwritten.
-    let put_caret = move |at: usize| {
-        request_animation_frame(move || {
-            if let Some(element) = input_ref.get_untracked() {
-                let at = u32::try_from(at.min(element.value().len())).unwrap_or(u32::MAX);
-                let _ = element.set_selection_range(at, at);
-                column.set(at as usize);
-            }
-        });
+        line.set(completion.line);
     };
 
     /// The letter of a plain one-character key, so `ctrl-a` is told from
@@ -509,17 +257,13 @@ pub fn Terminal(children: Children) -> impl IntoView {
     let on_keydown = move |event: KeyboardEvent| {
         // A running program owns the keyboard, except for ctrl-c, the way it
         // is anywhere: it is how you leave something that stopped listening.
-        if alt.get_untracked() {
+        if alt.showing() {
             event.prevent_default();
             let key = event.key();
             if key == "q" || (event.ctrl_key() && key.eq_ignore_ascii_case("c")) {
-                leave();
+                alt.leave();
             } else {
-                running.update_value(|program| {
-                    if let Some(program) = program.as_mut() {
-                        program.key(&key);
-                    }
-                });
+                alt.key(&key);
             }
             return;
         }
@@ -537,12 +281,11 @@ pub fn Terminal(children: Children) -> impl IntoView {
                 'c' if !selecting() => {
                     record(
                         prompt_tail(),
-                        format!("{}^C", input.get_untracked()),
+                        format!("{}^C", line.text.get_untracked()),
                         Output::Nothing,
                     );
-                    recalled.set(None);
-                    input.set(String::new());
-                    put_caret(0);
+                    line.set(String::new());
+                    line.put_caret(0);
                     true
                 }
                 // Clears around whatever is half typed, which stays put.
@@ -553,30 +296,26 @@ pub fn Terminal(children: Children) -> impl IntoView {
                 }
                 // End of input closes the session, but only on an empty line,
                 // or it would throw away what you were writing.
-                'd' if input.get_untracked().is_empty() => {
-                    input.set("exit".to_owned());
+                'd' if line.text.get_untracked().is_empty() => {
+                    line.set("exit".to_owned());
                     submit();
                     true
                 }
                 'a' => {
-                    put_caret(0);
+                    line.put_caret(0);
                     true
                 }
                 'e' => {
-                    put_caret(input.get_untracked().len());
+                    line.put_caret(line.end());
                     true
                 }
                 // Kill to the start of the line, and to the end of it.
                 'u' => {
-                    let at = caret();
-                    input.update(|line| line.drain(..at.min(line.len())).for_each(drop));
-                    put_caret(0);
+                    line.cut_to_start();
                     true
                 }
                 'k' => {
-                    let at = caret();
-                    input.update(|line| line.truncate(at.min(line.len())));
-                    put_caret(at);
+                    line.cut_to_end();
                     true
                 }
                 _ => false,
@@ -599,11 +338,11 @@ pub fn Terminal(children: Children) -> impl IntoView {
             }
             "ArrowUp" => {
                 event.prevent_default();
-                recall(true);
+                line.recall(true);
             }
             "ArrowDown" => {
                 event.prevent_default();
-                recall(false);
+                line.recall(false);
             }
             _ => {}
         }
@@ -613,7 +352,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
         // Not on keyup: a held key repeats keydown and sends no keyup until
         // release, which left the drawn cursor behind for as long as it was
         // down.
-        request_animation_frame(sync_column);
+        request_animation_frame(move || line.sync());
     };
 
     view! {
@@ -629,13 +368,13 @@ pub fn Terminal(children: Children) -> impl IntoView {
             class="tty"
             on:pointerdown=move |event| {
                 event.prevent_default();
-                focus_input();
+                line.focus();
             }
         >
-            <Show when=move || alt.get()>
+            <Show when=move || alt.showing()>
                 <div class="alt" aria-hidden="true">
                     {move || {
-                        rows.get()
+                        alt.rows()
                             .into_iter()
                             .map(|row| {
                                 view! {
@@ -665,7 +404,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
             <div
                 node_ref=screen_ref
                 class="screen"
-                class:stashed=move || alt.get()
+                class:stashed=move || alt.showing()
                 aria-live="polite"
             >
                 <div class:gone=move || !banner.get()>{children()}</div>
@@ -717,17 +456,16 @@ pub fn Terminal(children: Children) -> impl IntoView {
                                 // that is what it does.
                                 enterkeyhint="go"
                                 aria-label="terminal input"
-                                prop:value=move || input.get()
+                                prop:value=move || line.text.get()
                                 // The one place a click behaves normally, so
                                 // you can put the caret where you want it.
                                 on:pointerdown=|event| event.stop_propagation()
                                 on:input:target=move |event| {
-                                    recalled.set(None);
-                                    input.set(event.target().value());
-                                    sync_column();
+                                    line.set(event.target().value());
+                                    line.sync();
                                 }
-                                on:click=move |_| sync_column()
-                                on:select=move |_| sync_column()
+                                on:click=move |_| line.sync()
+                                on:select=move |_| line.sync()
                                 on:keydown=on_keydown
                             />
                             // The typed text, drawn over the input rather than
@@ -747,10 +485,10 @@ pub fn Terminal(children: Children) -> impl IntoView {
                                 // rasterises glyphs on a different pixel grid
                                 // from the plain span this becomes when echoed.
                                 style:left=move || {
-                                    format!("calc({} * var(--cell) * -1)", scrolled.get())
+                                    format!("calc({} * var(--cell) * -1)", line.scrolled.get())
                                 }
                             >
-                                {move || input.get()}
+                                {move || line.text.get()}
                             </span>
                             // The block cursor, at the real caret column. The
                             // native one is hidden in CSS.
@@ -760,7 +498,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
                                 style:left=move || {
                                     format!(
                                         "calc({} * var(--cell))",
-                                        column.get().saturating_sub(scrolled.get()),
+                                        line.column.get().saturating_sub(line.scrolled.get()),
                                     )
                                 }
                             >
@@ -773,7 +511,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
 
             // Pointerdown with the default prevented, so focus never leaves
             // the input and the keyboard stays up.
-            <Show when=move || !closed.get() && !alt.get()>
+            <Show when=move || !closed.get() && !alt.showing()>
                 <div class="keys">
                     <button
                         class="key"
@@ -790,7 +528,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
                         type="button"
                         on:pointerdown=move |event| {
                             event.prevent_default();
-                            recall(true);
+                            line.recall(true);
                         }
                     >
                         "up"
@@ -800,7 +538,7 @@ pub fn Terminal(children: Children) -> impl IntoView {
                         type="button"
                         on:pointerdown=move |event| {
                             event.prevent_default();
-                            recall(false);
+                            line.recall(false);
                         }
                     >
                         "down"

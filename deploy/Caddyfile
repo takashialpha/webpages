@@ -1,0 +1,62 @@
+# The reverse proxy in front of the site. Cloudflare sits in front of this.
+#
+# Only the marked lines differ from what was here before; everything else is
+# left exactly as it was, because it works.
+
+takashialpha.com {
+	tls {
+		# for cloudflare
+		issuer acme {
+			disable_tlsalpn_challenge
+		}
+	}
+
+	@multiSlashRoot vars_regexp {http.request.orig_uri.path} ^/{2,}$
+	redir @multiSlashRoot /{?query} 308
+
+	@trailingSlash path_regexp dir (.+?)/+$
+	redir @trailingSlash {re.dir.1}{?query} 308
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# nothing here should ever be framed. The page is a text
+		# field that runs what you type into it, so a transparent frame over
+		# it is worth ruling out even though nothing here is one click away
+		# from mattering.
+		X-Frame-Options "DENY"
+	}
+
+	encode zstd gzip
+
+	@static path /fonts/* /favicon* /apple-touch-icon.png /android-chrome-* /og.png /site.webmanifest /robots.txt
+	header @static Cache-Control "public, max-age=2592000"
+
+	@bundle path /pkg/*
+	header @bundle Cache-Control "public, max-age=31536000, immutable"
+
+	# CHANGED: was "no-cache", which was costing a full download of the
+	# program on every single run. "no-cache" means "revalidate before use";
+	# the browser duly sent If-Modified-Since and the origin answered 200 with
+	# all 65 KB every time, because it does not implement conditional requests.
+	#
+	# The programs are content-hashed now, the same as the bundle above, so a
+	# changed one has a different name and this can be immutable. The manifest
+	# is not hashed and is deliberately not matched here: it is only ever read
+	# by the server at startup, never by a browser.
+	@programs path /bin/*.wasm
+	header @programs Cache-Control "public, max-age=31536000, immutable"
+
+	# The board must never be held anywhere: it changes constantly and is read
+	# by a command, not a cache. The origin already says no-store; this is only
+	# here so a future matcher above cannot quietly cover it.
+	@board path /api/*
+	header @board Cache-Control "no-store"
+
+	reverse_proxy [::1]:3000
+}
+
+www.takashialpha.com {
+	redir https://takashialpha.com{uri} 308
+}

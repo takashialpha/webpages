@@ -30,10 +30,12 @@ for f in webpages hash.txt site; do
 done
 
 # The programs are built separately from the site, so an archive built without
-# that step is complete except for them.
+# that step is complete except for them. The manifest goes with them: it is how
+# the server learns their hashed names, and without it every program 404s.
 shopt -s nullglob
 guests=("$TMP"/site/bin/*.wasm)
 [ ${#guests[@]} -gt 0 ] || { echo "archive has no programs in site/bin" >&2; exit 1; }
+[ -s "$TMP/site/bin/hash.txt" ] || { echo "archive has no site/bin/hash.txt" >&2; exit 1; }
 
 rm -rf "$ROOT/next" "$ROOT/prev"
 mkdir -p "$ROOT/next"
@@ -49,7 +51,7 @@ mv "$ROOT/next" "$ROOT/current"
 # A 200 on `/` does not mean the deploy is good. Follow what the page and the
 # release actually point at, and check each one resolves.
 healthy() {
-    local html urls url guest
+    local html urls url name hash program
     html=$(curl -fsS --retry 10 --retry-delay 1 --retry-connrefused "$ORIGIN/") || return 1
 
     urls=$(grep -oE '/pkg/[A-Za-z0-9_.-]+\.(css|js|wasm)' <<<"$html" | sort -u)
@@ -61,10 +63,17 @@ healthy() {
 
     # Programs are fetched when they are run, so nothing on the page points at
     # them and a missing one would only show up when somebody ran it.
-    for guest in "$ROOT"/current/site/bin/*.wasm; do
-        curl -fsS -o /dev/null "$ORIGIN/bin/$(basename "$guest")" \
-            || { echo "program does not resolve: $(basename "$guest")" >&2; return 1; }
-    done
+    #
+    # Walked from the manifest, not from the directory. The manifest is what
+    # the server hands the browser, so a name in it with no file behind it is
+    # exactly the failure worth catching, and listing the directory cannot see
+    # that one: it only ever finds files that are already there.
+    while read -r name hash; do
+        [ -n "$name" ] || continue
+        program="${name%:}.$hash.wasm"
+        curl -fsS -o /dev/null "$ORIGIN/bin/$program" \
+            || { echo "program does not resolve: $program" >&2; return 1; }
+    done < "$ROOT/current/site/bin/hash.txt"
 }
 
 systemctl restart webpages

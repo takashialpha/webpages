@@ -1,3 +1,10 @@
+//! The site: the shell in the browser, the server behind it, and the few
+//! things both halves have to agree on.
+//!
+//! Built twice from one crate. `ssr` is the server binary; `hydrate` is the
+//! wasm bundle. A module that exists on both sides says so, usually by having
+//! two versions of the same function with the same signature.
+
 // A big static view tree becomes a deeply nested generic future, and resolving
 // or hydrating one goes past the default depth of 128.
 #![recursion_limit = "256"]
@@ -12,6 +19,8 @@ pub mod fs;
 pub mod program;
 pub mod screen;
 pub mod seo;
+#[cfg(feature = "ssr")]
+pub mod server;
 pub mod shell;
 pub mod terminal;
 pub mod theme;

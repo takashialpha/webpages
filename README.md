@@ -45,7 +45,18 @@ The same spec is what `help <command>` prints and what completion offers after a
 
 ## Layout
 
-A workspace: the site at the root, the guest programs under `bin/` as members. They share `[workspace.lints]`, so a program is held to the same conventions the site is.
+A workspace: the site at the root, the programs under `bin/`, and what they share under `lib/`. Every member takes `[workspace.lints]`, so a program is held to the same conventions the site is.
+
+```
+.
+├── bin/     the programs, one crate each
+├── lib/
+│   └── guest/   what all of them need from the terminal
+├── content/ everything the site says
+└── src/     the site
+```
+
+Inside `src/`, a module that got big enough to be doing several things has the rest beside it: `server.rs` with the routes, the logging and the shutdown; `terminal.rs` with the line editor, the alternate screen and the rendering; `wall.rs` with the grid, the server's copy and the browser's side of it; `wasi.rs` with the host state and the import object; `commands.rs` with the registry here and the functions grouped by what they touch.
 
 One lint cannot be shared. `unsafe_code` is only *denied* by the workspace, because a guest has to declare and call its wasm imports and both are unsafe. The site adds `#![forbid(unsafe_code)]` at its crate roots, which is stricter and cannot be undone. Each guest keeps its unsafe in one `tty` module, with a reason on the `expect` and a safety comment on every call.
 
@@ -82,7 +93,7 @@ There are no version tags; the latest build is whatever is in `main`.
 
 ## Deploying
 
-The unit and the deploy script are in `deploy/` and travel in the release archive, so the server can fetch the pair that matches the binary. Install them by fetching, never by pasting into an editor: a paste that loses line breaks produces a script that still looks right and does not parse.
+The unit, the deploy script and the proxy config are in `deploy/`. The first two travel in the release archive, so the server can fetch the pair that matches the binary. Install them by fetching, never by pasting into an editor: a paste that loses line breaks produces a script that still looks right and does not parse.
 
 ```sh
 sudo curl -fsSL -o /usr/local/bin/deploy-webpages \
@@ -152,7 +163,7 @@ The server checks two things before it opens the listener, because either can st
 
 A program takes the whole terminal, draws into a grid of cells, and gives it back exactly as it was. That is the alternate screen: the scrollback sits untouched underneath, which is why leaving `vim` does not eat your shell history.
 
-Programs are files. They live in `~/bin` as `Node::Program`, so `ls` lists them, `help` names them and completion offers them. The tree is the only place that says what exists.
+Programs are files. They live in `~/bin` as `Node::Program`, so `ls` lists them and completion offers them; `help` points at `bin/` rather than naming them, since they are not commands. The tree is the only place that says what exists.
 
 Only a path runs one. `./bin/life` and `bin/life` both work and a bare `life` does not, because there is no `PATH` here and inventing one would mean a name resolving to something the tree does not say is there. A path landing on something that is not a program still reads as `command not found`, with a line under it saying the file is there but is not one.
 
@@ -172,7 +183,7 @@ While a program runs the scrollback is made invisible rather than hidden, becaus
 
 A program can also be a `wasm32-wasip1` binary, fetched when it is run so none of it is in the bundle until someone asks. The browser has a WebAssembly engine, so nothing here interprets anything: the guest goes to that engine with an import object standing in for the operating system it thinks it has.
 
-`src/wasi.rs` is that import object. It implements seven calls, which is all a terminal program reaches for: `fd_write`, `fd_read`, `environ_get`, `environ_sizes_get`, `clock_time_get`, `random_get` and `proc_exit`. Nothing else is stubbed. A missing import fails at instantiation and names itself, which is where it should be noticed.
+`src/wasi.rs` and the two modules beside it are that import object. It implements seven calls, which is all a terminal program reaches for: `fd_write`, `fd_read`, `environ_get`, `environ_sizes_get`, `clock_time_get`, `random_get` and `proc_exit`. Nothing else is stubbed. A missing import fails at instantiation and names itself, which is where it should be noticed.
 
 `clock_time_get` answers the wall clock with the server's time and every other clock with how long the page has been open, so a guest timing itself gets something that only counts up.
 
@@ -190,6 +201,10 @@ Keys arrive as the bytes a terminal would send, escape sequences included, so a 
 
 Guests live in `bin/` as workspace members, held to the same lints as the site. `just guests` builds them into `public/bin/`, which cargo-leptos copies into the site. They are build output, not source.
 
+Their filenames carry a content hash, the same as the bundle: `tetris.15a6d22cdaaafa87.wasm`. A changed program gets a new URL, so the proxy can cache them forever and a deploy is picked up the moment the page reloads. The names cannot be baked into the site, because the site has to compile without the programs having been built — `just check` does exactly that. So `just guests` writes a `hash.txt` beside them, the server reads it once at startup and stamps it onto `<html data-programs>`, and the browser reads it back. That is the same route `data-uname` takes, for the same reason: it is something only the server can know.
+
+What they all need from the terminal is one crate, `lib/guest`: the `tty` imports, the keyboard, and the chrome. Not under `bin/`, which holds programs and a library is not one. It is there because four copies of the same thing drift, and these had: `life` bound `[` to a slower speed, and an arrow key sends `esc [ A`, so pressing one slowed the simulation down. Reading the keyboard through one escape-aware reader is what fixes that everywhere at once.
+
 ### The ones there are
 
 `life`, `snake`, `tetris` and `stars`, all guests. None is compiled into the site: there is only one way to be a program.
@@ -200,7 +215,9 @@ Guests live in `bin/` as workspace members, held to the same lints as the site. 
 
 `tetris` is the only one with a fixed shape, so it is centred rather than sized to the screen. A block is drawn one or two characters across, whichever fits, and the same number of half rows down, which is what keeps it square: a character cell is exactly twice as tall as it is wide, and three would be a block and a half. Every screen half-cell asks which block it falls inside, so one path draws either size.
 
-All four take their randomness from `fastrand` rather than a hand-rolled generator, seeded through the shim's clock.
+All seven pieces spawn lying flat, two rows at most, which is why the next-piece box is two rows and not four. J and L start a turn along from where their rotation tables are usually written, because that list stands them on end. The piece is centred in that box rather than drawn where the well would put it, since they do not all start in the same corner of their own 4x4.
+
+All four take their randomness from `fastrand` rather than a hand-rolled generator, seeded through the shim's clock, and read the keyboard through `lib/guest`, which puts the escape sequence an arrow arrives as back together before the program sees it.
 
 ## The wall
 
@@ -222,7 +239,11 @@ Board text is never linkified and never becomes markup, so what somebody writes 
 
 The board is stored as twenty-four lines of eighty characters, so moderating it is editing a file. The server notices: it compares the file's modification time against its own last write and reads it back before answering if somebody has been in there. No restart, and no watcher running between edits. Reading it back pads short lines and cuts long ones, so an edit cannot leave it a shape the code does not expect.
 
-`src/wall.rs` holds the grid, the validation and the limits; `src/main.rs` mounts `GET` and `POST /api/wall`.
+Reading the file back is also why only one write runs at a time. Two writes racing each render a board and then let go of the lock, so the older render can reach the file last, and the next write reads that stale file back over a board that was right. Sixteen writers filling the board at once used to lose most of what they wrote; they now all land, and the file always matches what is in memory.
+
+Writing is refused when the request came from another site's page. A `text/plain` POST is a CORS simple request, so any page anywhere could send one and never need to see the answer, and it would be the visitor's own address that got charged for it. `Sec-Fetch-Site` is set by the browser and a page cannot forge it. Nothing at all means it did not come from a browser, which is `curl` acting for whoever ran it, and that stays allowed.
+
+`src/wall.rs` holds what a board is, `wall/grid.rs` the grid, `wall/state.rs` the server's copy and its limits, and `wall/client.rs` the browser's side. `src/server/board.rs` mounts `GET` and `POST /api/wall`.
 
 ## The screen
 

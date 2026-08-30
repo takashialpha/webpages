@@ -182,7 +182,12 @@ pub fn usage(about: About<'_>) -> Output {
 
     if !about.spec.flags.is_empty() {
         let names: Vec<String> = about.spec.flags.iter().map(flag_names).collect();
-        let width = names.iter().map(String::len).max().unwrap_or(0);
+        // Characters, not bytes: this is a column to pad to. See `help`.
+        let width = names
+            .iter()
+            .map(|names| names.chars().count())
+            .max()
+            .unwrap_or(0);
 
         lines.push(vec![]);
         lines.push(vec![Span::new("options", "dim")]);

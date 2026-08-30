@@ -25,19 +25,13 @@ jobs:
       - run: just fmt
 
   clippy:
-    name: clippy (${{ matrix.target.name }})
+    name: clippy (${{ matrix.target }})
     runs-on: ubuntu-latest
     strategy:
+      # The names `just lint` knows. What each one actually passes to clippy
+      # lives in the justfile, so CI and a local run cannot disagree.
       matrix:
-        target:
-          - name: ssr
-            args: --no-default-features --features ssr
-          - name: hydrate
-            args: --no-default-features --features hydrate --target wasm32-unknown-unknown
-          # The guests, which are the workspace less the site, and are only
-          # ever built for wasi.
-          - name: guests
-            args: --workspace --exclude webpages --target wasm32-wasip1
+        target: [ssr, hydrate, guests]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -48,7 +42,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: just
-      - run: just lint ${{ matrix.target.name }}
+      - run: just lint ${{ matrix.target }}
 
   deps:
     name: cargo shear

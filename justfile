@@ -20,10 +20,19 @@ guests:
     names=$(ls bin)
     cargo build --profile guest --target wasm32-wasip1 \
         $(for name in $names; do printf -- '-p %s ' "$name"; done)
+    # Content-hashed, the way cargo-leptos names the bundle, so a program can
+    # be cached forever and a changed one gets a new URL. `hash.txt` is how the
+    # server learns the names; see program.rs. Emptied first, or yesterday's
+    # hashes pile up in there.
+    rm -rf public/bin
     mkdir -p public/bin
+    : > public/bin/hash.txt
     for name in $names; do
-        cp "target/wasm32-wasip1/guest/$name.wasm" "public/bin/$name.wasm"
-        echo "public/bin/$name.wasm"
+        built="target/wasm32-wasip1/guest/$name.wasm"
+        hash=$(sha256sum "$built" | cut -c1-16)
+        cp "$built" "public/bin/$name.$hash.wasm"
+        echo "$name: $hash" >> public/bin/hash.txt
+        echo "public/bin/$name.$hash.wasm"
     done
 
 # build the guests and serve the site

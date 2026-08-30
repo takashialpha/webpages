@@ -1,3 +1,8 @@
+//! The document: the shell the server renders, and the banner inside it.
+//!
+//! Everything below the banner is the terminal, which takes over once the page
+//! hydrates. This is all a crawler ever sees.
+
 use leptos::prelude::*;
 use leptos_meta::{Link, provide_meta_context};
 
@@ -19,11 +24,17 @@ use crate::{clock, theme};
 #[cfg(feature = "ssr")]
 #[must_use]
 pub fn shell(options: LeptosOptions) -> impl IntoView {
+    // Read before the view moves `options` into it.
+    let programs = crate::program::manifest(&options.site_root);
+
     view! {
         <!DOCTYPE html>
         <html
             lang="en"
             data-uname=uname()
+            // The programs' hashed filenames, which the build worked out and
+            // the browser has no other way to know. See program.rs.
+            data-programs=programs
             // The server's clock, which the browser carries forward rather than
             // consulting its own. See clock.rs.
             data-time=clock::now_millis().to_string()
