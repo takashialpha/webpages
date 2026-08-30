@@ -99,7 +99,20 @@ export WALL_PATH="/var/lib/webpages/wall.txt"
 
 and run the binary.
 
-`WALL_PATH` has to point outside the release directory. A deploy replaces that directory wholesale, so a board kept inside it is destroyed on the next one. Under systemd, `StateDirectory=webpages` creates and owns `/var/lib/webpages`. Leave the variable unset and the board falls back to `wall.txt` in the working directory, which is fine for a local run and wrong for a deploy.
+`WALL_PATH` has to point outside the release directory. A deploy replaces that directory wholesale, so a board kept inside it is destroyed on the next one. Leave the variable unset and it falls back to `wall.txt` in the working directory: fine locally, wrong for a deploy.
+
+The board lives in a home directory so it can be edited by hand. That needs three things, once:
+
+```sh
+sudo -u takashi mkdir -p /home/takashi/webpages
+sudo -u takashi touch /home/takashi/webpages/wall.txt
+sudo chmod 2775 /home/takashi/webpages          # setgid: new files keep the group
+sudo chmod 664  /home/takashi/webpages/wall.txt # the service writes it too
+```
+
+and, in the unit, `SupplementaryGroups=takashi` so the service is in that group, plus `ProtectHome=read-only` with `ReadWritePaths=/home/takashi/webpages`. `ProtectHome=yes` would hide the directory entirely, and `ReadWritePaths=` cannot open a path that is not there.
+
+If the service cannot write the board it says so at startup, as an `ERROR` naming the path. Nothing drawn would be kept, and that is not otherwise visible.
 
 The server shuts down on SIGINT or SIGTERM. It stops accepting new connections and waits for the requests already in flight to finish before it exits, so a restart never cuts a page off mid render. It exits with a non-zero status if it fails to start, and says why. `GET /health` reports uptime and the commit the binary was built from.
 

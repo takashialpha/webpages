@@ -278,6 +278,17 @@ async fn main() -> std::process::ExitCode {
             .map_or_else(|| std::path::PathBuf::from("wall.txt"), Into::into),
     ));
 
+    // The board is written on every change, so a path that cannot be written
+    // loses everything anyone draws. Better to say so at startup than at the
+    // first write.
+    if let Err(error) = wall.persist() {
+        error!(
+            path = %wall.path().display(),
+            %error,
+            "cannot write the graffiti board, so nothing drawn on it will be kept",
+        );
+    }
+
     let listener = match TcpListener::bind(addr).await {
         Ok(listener) => listener,
         Err(error) => {

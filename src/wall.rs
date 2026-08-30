@@ -253,6 +253,19 @@ impl State {
     pub fn path(&self) -> &std::path::Path {
         &self.path
     }
+
+    /// Writes the board where it will be kept, creating it if it is not there.
+    ///
+    /// Called once at startup so a board that cannot be saved is an error in
+    /// the journal, not a surprise at the first write.
+    ///
+    /// # Errors
+    ///
+    /// Whatever stopped the write: usually the directory not existing, or the
+    /// service not being allowed to write it.
+    pub fn persist(&self) -> std::io::Result<()> {
+        std::fs::write(&self.path, self.render())
+    }
 }
 
 /// Parses `x y char`.
