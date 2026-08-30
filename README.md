@@ -121,7 +121,10 @@ sudo -u takashi mkdir -p /home/takashi/webpages
 sudo -u takashi touch /home/takashi/webpages/wall.txt
 sudo chmod 2775 /home/takashi/webpages          # setgid: new files keep the group
 sudo chmod 664  /home/takashi/webpages/wall.txt # the service writes it too
+sudo chmod g+x  /home/takashi                   # so the service can traverse in
 ```
+
+That last one is the easy one to miss. A home directory is usually `drwx------`, and permission checks take the first matching class and stop: a service in group `takashi` gets the group bits and never falls through to the ones set for everyone else. Giving *others* traverse does nothing for it. The group needs `x`.
 
 and, in the unit, `SupplementaryGroups=takashi` so the service is in that group, plus `ProtectHome=read-only` with `ReadWritePaths=/home/takashi/webpages`. `ProtectHome=yes` would hide the directory entirely, and `ReadWritePaths=` cannot open a path that is not there.
 
@@ -215,7 +218,7 @@ The address comes from `CF-Connecting-IP`, which Cloudflare sets and strips from
 
 Board text is never linkified and never becomes markup, so what somebody writes stays what they wrote.
 
-The board is stored as twenty-four lines of eighty characters, so moderating it is editing a file. Reading it back pads short lines and cuts long ones, so hand-editing cannot put it into a shape the code does not expect.
+The board is stored as twenty-four lines of eighty characters, so moderating it is editing a file. The server notices: it compares the file's modification time against its own last write, and reads it back before answering if somebody has been in there. No restart, and no watcher running between edits. Reading it back pads short lines and cuts long ones, so an edit cannot put it into a shape the code does not expect.
 
 `src/wall.rs` holds the grid, the validation, and the limiter; `src/main.rs` mounts `GET` and `POST /api/wall`.
 

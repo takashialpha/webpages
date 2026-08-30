@@ -207,6 +207,9 @@ pub struct State {
     grid: std::sync::RwLock<Grid>,
     limiter: std::sync::Mutex<Limiter>,
     path: std::path::PathBuf,
+    /// When the file last matched what is held here. A newer file means
+    /// somebody edited it, and it is read back before the next answer.
+    synced: std::sync::Mutex<Option<std::time::SystemTime>>,
 }
 
 #[cfg(feature = "ssr")]
@@ -216,15 +219,62 @@ impl State {
     pub fn load(path: std::path::PathBuf) -> Self {
         let grid = std::fs::read_to_string(&path)
             .map_or_else(|_| Grid::blank(), |text| Grid::parse(&text));
-        Self {
+        let state = Self {
             grid: std::sync::RwLock::new(grid),
             limiter: std::sync::Mutex::new(Limiter::new()),
+            synced: std::sync::Mutex::new(None),
             path,
+        };
+        state.saved();
+        state
+    }
+
+    /// The file's modification time, or `None` if it cannot be read.
+    fn touched(&self) -> Option<std::time::SystemTime> {
+        std::fs::metadata(&self.path)
+            .and_then(|meta| meta.modified())
+            .ok()
+    }
+
+    /// Records that the file now matches what is held here. Call after writing
+    /// it, or the next read will see a newer file and load back what it just
+    /// wrote.
+    pub fn saved(&self) {
+        *self
+            .synced
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = self.touched();
+    }
+
+    /// Reads the file back if it has changed since this last wrote it.
+    ///
+    /// Editing the file is how the board is moderated, so an edit has to take
+    /// effect without a restart. Checked when the board is read or written
+    /// rather than watched, which needs nothing to be running in between.
+    fn refresh(&self) {
+        let Some(touched) = self.touched() else {
+            return;
+        };
+        let mut synced = self
+            .synced
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if *synced == Some(touched) {
+            return;
         }
+
+        if let Ok(text) = std::fs::read_to_string(&self.path) {
+            *self
+                .grid
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Grid::parse(&text);
+        }
+        *synced = Some(touched);
     }
 
     #[must_use]
     pub fn render(&self) -> String {
+        self.refresh();
         // A poisoned lock still holds a perfectly good grid: whatever panicked
         // happened elsewhere, and losing the board over it would be worse.
         self.grid
@@ -243,6 +293,9 @@ impl State {
     /// Sets one cell. Returns the board's new form when it changed, which is
     /// what the caller persists, or `None` when nothing did.
     pub fn set(&self, x: usize, y: usize, byte: u8) -> Option<String> {
+        // So a write lands on top of whatever the file says now, rather than
+        // on a copy from before somebody edited it.
+        self.refresh();
         let mut grid = self
             .grid
             .write()
@@ -264,7 +317,9 @@ impl State {
     /// Whatever stopped the write: usually the directory not existing, or the
     /// service not being allowed to write it.
     pub fn persist(&self) -> std::io::Result<()> {
-        std::fs::write(&self.path, self.render())
+        let written = std::fs::write(&self.path, self.render());
+        self.saved();
+        written
     }
 }
 

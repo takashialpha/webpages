@@ -142,12 +142,15 @@ async fn write_cell(
 
     // Written outside the lock, and only when something actually changed, so
     // setting a cell to what it already held costs no disk at all.
-    if let Some(text) = wall.set(x, y, byte)
-        && let Err(error) = tokio::fs::write(wall.path(), &text).await
-    {
-        // The write still stands in memory, so the board is right until a
-        // restart. Saying so is more useful than failing the request.
-        tracing::error!(path = %wall.path().display(), %error, "could not persist the board");
+    if let Some(text) = wall.set(x, y, byte) {
+        match tokio::fs::write(wall.path(), &text).await {
+            Ok(()) => wall.saved(),
+            // The write still stands in memory, so the board is right until a
+            // restart. Saying so is more useful than failing the request.
+            Err(error) => {
+                tracing::error!(path = %wall.path().display(), %error, "could not persist the board");
+            }
+        }
     }
 
     (WALL_HEADERS, wall.render()).into_response()
