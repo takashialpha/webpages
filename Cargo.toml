@@ -91,13 +91,19 @@ wasm-bindgen = { version = "0", optional = true }
 # `#[doc(hidden)]` path, so it is named here. Already in the tree.
 wasm-bindgen-futures = { version = "0", optional = true }
 # Only what leptos does not already switch on. `FontFaceSet` says when the
-# console font has landed and the cell can be measured, `Performance` is how
-# long the page has been open, `Selection` tells a ctrl-c copy from an
-# interrupt, `VisualViewport` is the screen a phone keyboard leaves. See
-# viewport.rs and clock.rs. Everything else, fetch and styles included, leptos
-# enables already, and asking twice is a second place to keep in step.
+# console font has landed and the cell can be measured, `History` puts the url
+# right on a 404, `Performance` is how long the page has been open, `Selection`
+# tells a ctrl-c copy from an interrupt, `VisualViewport` is the screen a phone
+# keyboard leaves. See viewport.rs, clock.rs and terminal.rs. Everything else,
+# fetch and styles included, leptos enables already, and asking twice is a
+# second place to keep in step.
+#
+# `History` is the one here that would compile without being asked for, because
+# `leptos_router` wants it and is in the tree under `leptos_axum`. That feature
+# set is not ours to depend on.
 web-sys = { version = "0", features = [
   "FontFaceSet",
+  "History",
   "Performance",
   "Selection",
   "VisualViewport",

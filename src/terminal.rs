@@ -32,6 +32,27 @@ struct Entry {
     output: RwSignal<Output>,
 }
 
+/// Puts the address bar right on a page that answered a 404.
+///
+/// The path that was asked for is not a place, so it does not stay in the bar
+/// once the page is alive: a reload or a bookmark would otherwise repeat a 404
+/// that has already been answered. `replaceState` rather than a navigation, so
+/// the page, the scrollback and the session are all exactly as they were and the
+/// only thing that changes is the url. It also takes the bad path out of the
+/// history, so going back goes wherever the visitor came from.
+#[cfg(feature = "hydrate")]
+fn clean_url() {
+    use wasm_bindgen::prelude::JsValue;
+
+    if let Ok(history) = window().history() {
+        let _ = history.replace_state_with_url(&JsValue::NULL, "", Some("/"));
+    }
+}
+
+/// The server has no address bar. Here so the module compiles there.
+#[cfg(not(feature = "hydrate"))]
+const fn clean_url() {}
+
 /// Whether anything is selected. `ctrl-c` copies if so, interrupts if not.
 #[cfg(feature = "hydrate")]
 fn selecting() -> bool {
@@ -66,6 +87,8 @@ fn fits(span: f64, cell: f64) -> usize {
 pub fn Terminal(children: Children) -> impl IntoView {
     let session = RwSignal::new(Session::new());
     let scrollback = RwSignal::new(Vec::<Entry>::new());
+    // The path this page was a 404 for, if it was one. See `crate::missing`.
+    let missing = crate::missing();
     // `clear` takes the banner with it, the way clearing a real screen would.
     let banner = RwSignal::new(true);
     // Set by `exit`. The prompt goes away and nothing else is read.
@@ -111,6 +134,15 @@ pub fn Terminal(children: Children) -> impl IntoView {
     // will skip.
     Effect::new(move |_| line.focus());
 
+    // And on a 404, put the url right. An effect, so it happens once the page
+    // is running rather than during the render that says what is missing.
+    let asked = missing.is_some();
+    Effect::new(move |_| {
+        if asked {
+            clean_url();
+        }
+    });
+
     // A Safari attribute with no typed setter in leptos. Without it, ios
     // rewrites commands into prose as you type.
     Effect::new(move |_| {
@@ -141,6 +173,19 @@ pub fn Terminal(children: Children) -> impl IntoView {
         scrollback.track();
         alt.showing();
         scroll_to_prompt();
+    });
+
+    // Taking the screen back. The input is the keyboard while a program runs, so
+    // it never lost focus, but it spent that time invisible inside a scrollback
+    // that was out of the way, which is enough for a phone to have dropped the
+    // keyboard or left a suggestion part applied to a field nothing was reading.
+    // Only the handing back: on mount there is nothing to put right.
+    Effect::new(move |was: Option<bool>| {
+        let showing = alt.showing();
+        if was == Some(true) && !showing {
+            line.reset();
+        }
+        showing
     });
 
     // And keep it in view when the screen itself changes size, which is what
@@ -255,12 +300,18 @@ pub fn Terminal(children: Children) -> impl IntoView {
     }
 
     let on_keydown = move |event: KeyboardEvent| {
-        // A running program owns the keyboard, except for ctrl-c, the way it
-        // is anywhere: it is how you leave something that stopped listening.
+        // A running program owns the keyboard, except for the two ways out of
+        // one. The terminal answers `q` and `ctrl-c` itself and never hands them
+        // on, so nothing that draws can trap you: a phone has no ctrl key, and a
+        // program that stopped reading its keys would otherwise take a reload to
+        // leave. Every program offers `q: quit` in its own bar and answers it
+        // itself as well, which is what makes the promise good in any terminal;
+        // this is what makes it good in one that has wedged.
         if alt.showing() {
             event.prevent_default();
             let key = event.key();
-            if key == "q" || (event.ctrl_key() && key.eq_ignore_ascii_case("c")) {
+            if key.eq_ignore_ascii_case("q") || (event.ctrl_key() && key.eq_ignore_ascii_case("c"))
+            {
                 alt.leave();
             } else {
                 alt.key(&key);
@@ -407,7 +458,25 @@ pub fn Terminal(children: Children) -> impl IntoView {
                 class:stashed=move || alt.showing()
                 aria-live="polite"
             >
-                <div class:gone=move || !banner.get()>{children()}</div>
+                <div class:gone=move || !banner.get()>
+                    {children()}
+                    // A url that is not here. The banner says what the box is;
+                    // this says what became of the path that was asked for, and
+                    // stays in the scrollback as the answer to it. Inside the
+                    // same block, so `clear` takes the whole login screen with
+                    // it. The url itself is put right by `clean_url` above.
+                    {missing
+                        .map(|path| {
+                            view! {
+                                <p class="line">
+                                    <span class="err">"404"</span>
+                                    <span class="dim">" no such page: "</span>
+                                    {path}
+                                </p>
+                                <p class="line">""</p>
+                            }
+                        })}
+                </div>
                 {move || {
                     scrollback
                         .get()
@@ -461,6 +530,17 @@ pub fn Terminal(children: Children) -> impl IntoView {
                                 // you can put the caret where you want it.
                                 on:pointerdown=|event| event.stop_propagation()
                                 on:input:target=move |event| {
+                                    // While a program has the screen this input
+                                    // is its keyboard and not the line. Every
+                                    // keydown is refused, but a phone inserts
+                                    // text without one the terminal can refuse,
+                                    // and what it inserted would be sitting on
+                                    // the line when the screen came back. The
+                                    // field is put back instead of read.
+                                    if alt.showing() {
+                                        event.target().set_value(&line.text.get_untracked());
+                                        return;
+                                    }
                                     line.set(event.target().value());
                                     line.sync();
                                 }

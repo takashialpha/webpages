@@ -116,10 +116,6 @@ pub const ROOT: Node = Node::Dir(&[
                 name: "webpages.txt",
                 node: Node::File(include_str!("../content/projects/webpages.txt")),
             },
-            Entry {
-                name: "niri-takashialpha.txt",
-                node: Node::File(include_str!("../content/projects/niri-takashialpha.txt")),
-            },
         ]),
     },
     // The only file anyone else can write to, and the only one the server

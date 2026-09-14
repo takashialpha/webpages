@@ -157,6 +157,16 @@ pub fn error_line(text: impl Into<String>) -> Line {
     vec![Span::new(format!("swagsh: {}", text.into()), "err")]
 }
 
+/// A word that could not be run, and the line that says what to do instead.
+///
+/// Named the way a shell names it: what was typed, then what was wrong with it.
+fn refused(name: &str, problem: &str, hint: String) -> Output {
+    Output::Lines(vec![
+        error_line(format!("{name}: {problem}")),
+        vec![Span::new(hint, "dim")],
+    ])
+}
+
 /// Runs one line of input.
 pub fn run(session: &mut Session, input: &str) -> Output {
     let mut parts = input.split_whitespace();
@@ -181,29 +191,47 @@ pub fn run(session: &mut Session, input: &str) -> Output {
 /// Only a path runs a program: `./bin/life` and `bin/life` do, a bare `life`
 /// does not. There is no `PATH`, and inventing one would mean a name resolving
 /// to something the tree never said was there.
+///
+/// Everything else is a refusal, and which one is the same question a shell
+/// asks: a word with a slash in it is a filename, so a missing one is `No such
+/// file or directory`; a bare word was looked for on a `PATH` that is not
+/// there, so it is `command not found`. Either way, a word that does name
+/// something says what that something is, since `not found` would send someone
+/// hunting for a typo they did not make.
 fn launchable(session: &Session, name: &str, args: &[&str]) -> Output {
-    let found = if name.contains('/') {
-        match fs::resolve(&session.cwd, name).and_then(|segments| fs::node_at(&segments)) {
-            Some(&fs::Node::Program(listing)) => Some(listing),
-            // It is there, just not runnable. "not found" alone would send
-            // someone hunting for a typo.
-            Some(_) => {
-                return Output::Lines(vec![
-                    error_line(format!("command not found: {name}")),
-                    vec![Span::new(
-                        format!("{name} exists, but it is not a program."),
-                        "dim",
-                    )],
-                ]);
-            }
-            None => None,
+    let path = name.contains('/');
+    let listing = match fs::resolve(&session.cwd, name).and_then(|segments| fs::node_at(&segments))
+    {
+        Some(fs::Node::Dir(_)) => {
+            return refused(name, "Is a directory", format!("try `cd {name}`"));
         }
-    } else {
-        None
-    };
-
-    let Some(listing) = found else {
-        return error(format!("command not found: {name}"));
+        Some(fs::Node::File(_) | fs::Node::Live(_)) => {
+            return refused(name, "Is a file", format!("try `cat {name}`"));
+        }
+        Some(&fs::Node::Program(listing)) if path => listing,
+        // Runnable, and standing right there, but named the one way that does
+        // not run it. `./` is what a shell wants for the same reason.
+        Some(&fs::Node::Program(_)) => {
+            return refused(name, "command not found", format!("try `./{name}`"));
+        }
+        None if path => return error(format!("{name}: No such file or directory")),
+        // Nowhere on the way to anything, but it is the name of a program. No
+        // `PATH` found it, so say where it actually is.
+        None => {
+            return crate::program::BIN
+                .iter()
+                .find(|entry| entry.name == name)
+                .map_or_else(
+                    || error(format!("{name}: command not found")),
+                    |entry| {
+                        refused(
+                            name,
+                            "command not found",
+                            format!("try `~/bin/{}`", entry.name),
+                        )
+                    },
+                );
+        }
     };
 
     // Checked like a command's line, so `bin/life --help` answers and

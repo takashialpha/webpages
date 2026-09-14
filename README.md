@@ -6,7 +6,9 @@
 
 My personal site, served live at **[takashialpha.com](https://takashialpha.com)**. The whole page is a tty: it opens on a login banner and everything past that is typed. A server-rendered Rust app on [Leptos](https://github.com/leptos-rs/leptos) and [Axum](https://github.com/tokio-rs/axum), hydrated on the client.
 
-There is one route. The server renders the banner, which is also all a search engine sees, and the shell runs in the browser from there. No command changes the URL.
+There is one page. The server renders the banner, which is also all a search engine sees, and the shell runs in the browser from there. No command changes the URL.
+
+Every other path answers 404 with that same page, and says so in a line under the banner naming the path that is not there. A url is not a command: running one as `cat /whatever` would only teach a path that cannot resolve, since nothing in this tree starts at `/`. So the 404 says what it is, and the url is put right the moment the page is alive: a `replaceState` to `/`, which leaves the page, the scrollback and the session exactly as they are and changes nothing but the address. A reload or a bookmark then asks for the page that is there rather than repeating a 404 that has already been answered, and going back goes wherever the visitor came from rather than to a path that is not a place. No keystroke navigates anywhere, and the line naming the path stays in the scrollback as the answer to it.
 
 ## Content
 
@@ -165,7 +167,9 @@ A program takes the whole terminal, draws into a grid of cells, and gives it bac
 
 Programs are files. They live in `~/bin` as `Node::Program`, so `ls` lists them and completion offers them; `help` points at `bin/` rather than naming them, since they are not commands. The tree is the only place that says what exists.
 
-Only a path runs one. `./bin/life` and `bin/life` both work and a bare `life` does not, because there is no `PATH` here and inventing one would mean a name resolving to something the tree does not say is there. A path landing on something that is not a program still reads as `command not found`, with a line under it saying the file is there but is not one.
+Only a path runs one. `./bin/life` and `bin/life` both work and a bare `life` does not, because there is no `PATH` here and inventing one would mean a name resolving to something the tree does not say is there.
+
+Anything else typed as a command is refused the way a shell refuses it, which is not one message but four. A word with a slash in it is a filename, so a missing one is `No such file or directory`; a bare word was looked for on a `PATH` that is not there, so it is `command not found`. A word that does name something says what it named, since `not found` would send someone hunting for a typo they did not make: `bin` is a directory and `documents/about.txt` is a file, each with the command that would have read it under it. A bare `tetris` says where the program actually is.
 
 The first word is completed as both, for the same reason: a command name, and a path, since typing a path is how a program is reached.
 
@@ -177,7 +181,11 @@ One that draws is different. The terminal owns the frame loop and calls it once 
 
 Colours are indices into the sixteen a console has, resolved by the stylesheet, so a program follows `theme` without knowing themes exist. The grid is measured from the terminal's real size rather than assuming 80 by 24.
 
-While a program runs the scrollback is made invisible rather than hidden, because the input inside it is the keyboard and a `display: none` element cannot hold focus. It keeps its full size while it is out of sight: shrinking it throws its scroll position away and leaves the focused input somewhere ios tries to scroll the page to. `q` and `ctrl-c` both leave.
+While a program runs the scrollback is made invisible rather than hidden, because the input inside it is the keyboard and a `display: none` element cannot hold focus. It keeps its full size while it is out of sight: shrinking it throws its scroll position away and leaves the focused input somewhere ios tries to scroll the page to.
+
+`q` and `ctrl-c` both leave, and the terminal answers both itself rather than handing them on, so nothing that draws can trap you: a phone has no ctrl key, and a program that stopped reading its keys would otherwise take a reload to get out of. Each program answers `q` as well, because a program that offers `q: quit` in its own bar should mean it in any terminal.
+
+That input is the program's keyboard, not the shell's line, so what it does with a key is ignored while one runs. Every keydown is refused, but a phone keyboard inserts text without a key event there is anything to refuse, and whatever it inserted would be sitting on the line when the screen came back. The field is put back to what the line says instead, and put back again, with the keyboard on it, the moment the program hands the screen over.
 
 ### Guests
 
@@ -201,7 +209,7 @@ Keys arrive as the bytes a terminal would send, escape sequences included, so a 
 
 Guests live in `bin/` as workspace members, held to the same lints as the site. `just guests` builds them into `public/bin/`, which cargo-leptos copies into the site. They are build output, not source.
 
-Their filenames carry a content hash, the same as the bundle: `tetris.15a6d22cdaaafa87.wasm`. A changed program gets a new URL, so the proxy can cache them forever and a deploy is picked up the moment the page reloads. The names cannot be baked into the site, because the site has to compile without the programs having been built — `just check` does exactly that. So `just guests` writes a `hash.txt` beside them, the server reads it once at startup and stamps it onto `<html data-programs>`, and the browser reads it back. That is the same route `data-uname` takes, for the same reason: it is something only the server can know.
+Their filenames carry a content hash, the same as the bundle: `tetris.15a6d22cdaaafa87.wasm`. A changed program gets a new URL, so the proxy can cache them forever and a deploy is picked up the moment the page reloads. The names cannot be baked into the site, because the site has to compile without the programs having been built, which is exactly what `just check` does. So `just guests` writes a `hash.txt` beside them, the server reads it once at startup and stamps it onto `<html data-programs>`, and the browser reads it back. That is the same route `data-uname` takes, for the same reason: it is something only the server can know.
 
 What they all need from the terminal is one crate, `lib/guest`: the `tty` imports, the keyboard, and the chrome. Not under `bin/`, which holds programs and a library is not one. It is there because four copies of the same thing drift, and these had: `life` bound `[` to a slower speed, and an arrow key sends `esc [ A`, so pressing one slowed the simulation down. Reading the keyboard through one escape-aware reader is what fixes that everywhere at once.
 
@@ -209,13 +217,23 @@ What they all need from the terminal is one crate, `lib/guest`: the `tty` import
 
 `life`, `snake`, `tetris` and `stars`, all guests. None is compiled into the site: there is only one way to be a program.
 
-`life`, `snake` and `tetris` draw two cells per character with half blocks, which doubles the resolution and makes the cells square, and each carries a status bar that drops hints rather than overflow a narrow screen. `stars` is one character per star and has neither.
+`life`, `snake` and `tetris` draw two cells per character with half blocks, which doubles the resolution and makes the cells square. `stars` is one character per star.
 
-`snake` takes arrows or wasd. Arrows arrive as `esc [ A`, so it tracks the escape sequence rather than matching the bare letter, or a typed `A` would steer. A turn is stored and applied at the next step, so two keys in one frame cannot fold the snake into itself.
+All four carry a status bar: what the program is and what it is doing on the left, what the keys do on the right, dropping hints from the front rather than overflowing a narrow screen. So every key a program answers is named by the program itself, which is the only place that can be right about it.
+
+The two that can stop, `snake` when you die and `tetris` when the well fills, say so in a band of reverse video across the field as well, and grey out what is left of the picture, because a bar that gained one word is not the difference between a game that is running and one that is not. A pause says so the same way. `tetris` empties the well while it is paused, the way a tetris that would rather not be studied with the clock stopped does.
+
+`snake` takes arrows or wasd. Arrows arrive as `esc [ A`, so it tracks the escape sequence rather than matching the bare letter, or a typed `A` would steer. A turn is stored and applied at the next step, so two keys in one frame cannot fold the snake into itself. `p` pauses rather than space, so that space means one thing there: the game again.
 
 `tetris` is the only one with a fixed shape, so it is centred rather than sized to the screen. A block is drawn one or two characters across, whichever fits, and the same number of half rows down, which is what keeps it square: a character cell is exactly twice as tall as it is wide, and three would be a block and a half. Every screen half-cell asks which block it falls inside, so one path draws either size.
 
-All seven pieces spawn lying flat, two rows at most, which is why the next-piece box is two rows and not four. J and L start a turn along from where their rotation tables are usually written, because that list stands them on end. The piece is centred in that box rather than drawn where the well would put it, since they do not all start in the same corner of their own 4x4.
+What it does, it does the way the guideline says, because a tetris that is nearly right plays wrong. Pieces come out of a bag: all seven shuffled and dealt one at a time, not seven independent draws, which would keep an `I` from you for a dozen pieces and then hand you three. A piece can be held, once per piece. A piece resting on the stack has half a second before it locks and a move puts that off, fifteen times, which is what lets one be slid under an overhang at a speed where it would otherwise stick where it fell. Gravity is the guideline's own curve, a second a row at the first level down to seven milliseconds at the fifteenth. Dropping is scored, softly and hard, so knowing where a piece goes is worth something.
+
+Turning is super rotation, kicks included. A piece turns inside a box: 3x3 for the five that are three wide, 4x4 for `I`, and a 2x2 that never moves for `O`. The cells of a turn are worked out by turning the spawn shape rather than written down four times each: a quarter turn clockwise in a box `n` across sends `(x, y)` to `(n - 1 - y, x)`. Twenty-eight shapes written out by hand is twenty-eight chances to get one wrong, and the box is what the kick tables are measured against anyway. Those tables are the published ones, `x` across and `y` up, turned back into a screen that counts `y` down in one place.
+
+Beside the well are two boxes, stacked in one column so that showing three pieces of queue costs no width: what is held, greyed out once this piece has spent its swap, and what is coming. Each piece is centred in its own little grid rather than drawn where the well would put it, since they do not all start in the same corner of their own box. The boxes carry their names in their top rule.
+
+What the keys do is listed down the margin to the left of the well, where the screen is wide enough to have a margin. The well is the one thing on the site with a fixed size, so a desktop has room either side of it and a phone has none; the bar's hints are what a phone gets, which is why both are built from one list of keys. Two lists of what a key does is two places for a key to go missing from, and `r` had gone missing from one.
 
 All four take their randomness from `fastrand` rather than a hand-rolled generator, seeded through the shim's clock, and read the keyboard through `lib/guest`, which puts the escape sequence an arrow arrives as back together before the program sees it.
 

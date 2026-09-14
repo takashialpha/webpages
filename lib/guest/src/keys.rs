@@ -26,8 +26,8 @@ enum Reading {
 ///
 /// An arrow is `esc [ A`: three bytes, and they can arrive across three
 /// frames. Reading them one at a time is how a program ends up steering on a
-/// typed `A` — or, if it binds `[` to something, doing that every time anyone
-/// presses an arrow.
+/// typed `A`, or doing whatever it binds `[` to every time anyone presses an
+/// arrow.
 pub struct Keys {
     reading: Reading,
 }

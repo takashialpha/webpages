@@ -39,6 +39,9 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             // consulting its own. See clock.rs.
             data-time=clock::now_millis().to_string()
             data-uptime=clock::uptime_secs().to_string()
+            // Empty unless this render is a 404, in which case it is the path
+            // that was asked for. See `crate::missing`.
+            data-missing=crate::missing().unwrap_or_default()
             data-theme=theme::DEFAULT
         >
             <head>

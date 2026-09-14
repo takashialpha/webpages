@@ -1,2 +1,0 @@
-a leaner personal fork of the niri wayland compositor.
-https://github.com/takashialpha/niri-takashialpha

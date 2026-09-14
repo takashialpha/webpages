@@ -82,6 +82,53 @@ pub fn uname() -> String {
         .unwrap_or_else(|| "Linux takashialpha unknown".to_owned())
 }
 
+/// The path a render is a 404 for, put in context by the fallback route and
+/// read back by [`missing`].
+#[cfg(not(feature = "hydrate"))]
+#[derive(Clone)]
+pub struct Missing(pub String);
+
+/// A requested path, cut to something one terminal line can hold.
+///
+/// Cut here rather than where it is shown, so the server stamps and the browser
+/// reads back the same string. A url can be as long as a proxy allows, and the
+/// page echoes this one.
+#[cfg(not(feature = "hydrate"))]
+#[must_use]
+pub fn missing_path(path: &str) -> String {
+    /// Longer than any path this site ever served.
+    const MOST: usize = 64;
+
+    match path.char_indices().nth(MOST) {
+        None => path.to_owned(),
+        // Three dots rather than an ellipsis: the console font is a code page,
+        // and this is drawn in it.
+        Some((cut, _)) => format!("{}...", &path[..cut]),
+    }
+}
+
+/// The path that was asked for and is not here, or `None` on the page that is.
+///
+/// A 404 is this same page with a line about the path added, so the browser has
+/// to learn which of the two it is hydrating. The server stamps it onto
+/// `<html data-missing>`, the way it does the kernel and the programs, and for
+/// the same reason: there is no other way for the browser to know.
+#[cfg(not(feature = "hydrate"))]
+#[must_use]
+pub fn missing() -> Option<String> {
+    leptos::prelude::use_context::<Missing>().map(|Missing(path)| path)
+}
+
+/// Reads back what the server stamped, so the page hydrates to identical markup.
+#[cfg(feature = "hydrate")]
+#[must_use]
+pub fn missing() -> Option<String> {
+    leptos::prelude::document()
+        .document_element()
+        .and_then(|html| html.get_attribute("data-missing"))
+        .filter(|path| !path.is_empty())
+}
+
 /// [`BUILD`] cut to the usual seven characters, when it is a full sha.
 #[must_use]
 pub fn short_build() -> &'static str {

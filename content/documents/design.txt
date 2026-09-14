@@ -1,1 +1,1 @@
-i think about design at the system level. if i get the base wrong, everything built on top of it gets worse, so that's where i spend the time.
+i like thinking about systems as a whole. if the foundation is wrong, everything built on top of it gets harder to reason about and harder to maintain, so that's where i spend the time.

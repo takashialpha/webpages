@@ -9,7 +9,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
-use guest::{Key, Keys, half, line, status, tty};
+use guest::{Key, Keys, half, line, notice, status, tty};
 
 /// Milliseconds a step lasts, before and after growing.
 const START: f32 = 130.0;
@@ -20,6 +20,10 @@ const HEAD: u8 = 15;
 const FOOD: u8 = 11;
 const DEAD: u8 = 9;
 const FRAME: u8 = 8;
+
+/// A snake that is no longer going anywhere. The same grey as the frame: it is
+/// scenery now.
+const SPENT: u8 = 8;
 
 /// Rows the frame and the status bar take, leaving the rest to play in.
 const CHROME: usize = 3;
@@ -67,6 +71,7 @@ struct Game {
     due: f32,
     score: u32,
     best: u32,
+    paused: bool,
     dead: bool,
     keys: Keys,
 }
@@ -83,6 +88,7 @@ impl Game {
             due: 0.0,
             score: 0,
             best: 0,
+            paused: false,
             dead: false,
             keys: Keys::new(),
         }
@@ -120,6 +126,7 @@ impl Game {
         self.heading = Way::Right;
         self.turning = Way::Right;
         self.score = 0;
+        self.paused = false;
         self.dead = false;
         self.due = 0.0;
         self.drop_food();
@@ -206,17 +213,39 @@ impl Game {
     fn input(&mut self) -> bool {
         while let Some(key) = self.keys.read() {
             match key {
+                // The terminal answers `q` itself, before a program is handed
+                // the key, so that nothing running in it can trap you. This is
+                // here because a program that offers `q: quit` should mean it
+                // wherever it runs.
+                Key::Byte(b'q' | b'Q') => return true,
+                Key::Byte(b'r' | b'R') => self.restart(),
+                Key::Byte(b'p' | b'P') if !self.dead => self.paused = !self.paused,
+                Key::Byte(b' ') if self.dead => self.restart(),
+                // Steering, which does nothing while it is stopped. `p` rather
+                // than space for the pause, so space means one thing here: the
+                // game again.
+                _ if self.paused || self.dead => {}
                 Key::Up | Key::Byte(b'w' | b'W') => self.turn(Way::Up),
                 Key::Down | Key::Byte(b's' | b'S') => self.turn(Way::Down),
                 Key::Left | Key::Byte(b'a' | b'A') => self.turn(Way::Left),
                 Key::Right | Key::Byte(b'd' | b'D') => self.turn(Way::Right),
-                Key::Byte(b'q' | b'Q') => return true,
-                Key::Byte(b'r' | b'R') => self.restart(),
-                Key::Byte(b' ') if self.dead => self.restart(),
                 Key::Byte(_) => {}
             }
         }
         false
+    }
+
+    /// What the field is doing, when it is not simply running. The one place the
+    /// two stopped states are named, so the band across the field and the bar
+    /// under it cannot disagree about which one it is in.
+    const fn state(&self) -> Option<&'static str> {
+        if self.dead {
+            Some("game over")
+        } else if self.paused {
+            Some("paused")
+        } else {
+            None
+        }
     }
 
     /// What is in each cell, laid out once so drawing does not search the
@@ -230,8 +259,11 @@ impl Game {
         };
 
         mark(self.food, FOOD);
+        // A dead snake goes grey, so a field that has stopped does not look like
+        // one that is still going.
+        let body = if self.dead { SPENT } else { SNAKE };
         for part in self.snake.iter().skip(1) {
-            mark(*part, SNAKE);
+            mark(*part, body);
         }
         if let Some(head) = self.snake.front() {
             mark(*head, if self.dead { DEAD } else { HEAD });
@@ -259,19 +291,35 @@ impl Game {
             tty::draw(self.cols + 1, row, '│', FRAME, 0);
         }
 
-        // Least useful first, since that is the order they are dropped in on a
-        // narrow screen.
+        // Over the picture, once it is a picture that has stopped moving: a
+        // stopped field and a running one are otherwise the same field.
+        if let Some(word) = self.state() {
+            notice(1, self.rows / 4 + 1, self.cols, word);
+        }
+
+        // Only the keys that do something in the state it is in: a hint for one
+        // that is being ignored is worse than no hint. Least useful first, since
+        // that is the order they are dropped in on a narrow screen.
         let hints: &[&str] = if self.dead {
-            &["space: again", "q: quit"]
+            &["r: again", "space: again", "q: quit"]
+        } else if self.paused {
+            &["r: restart", "p: resume", "q: quit"]
         } else {
-            &["r: restart", "arrows or wasd", "q: quit"]
+            &[
+                "arrows: or wasd",
+                "r: restart",
+                "p: pause",
+                "wasd: move",
+                "q: quit",
+            ]
         };
         status(
             &format!(
                 " snake │ {} │ best {} │{}",
                 self.score,
                 self.best,
-                if self.dead { " dead │" } else { "" },
+                self.state()
+                    .map_or_else(String::new, |word| format!(" {word} │")),
             ),
             hints,
         );
@@ -301,16 +349,18 @@ pub extern "C" fn frame(elapsed: f32) -> i32 {
             return 0;
         }
 
-        game.due += elapsed;
-        let pace = game.pace();
-        for _ in 0..CATCHUP {
-            if game.due < pace {
-                break;
+        if !game.paused {
+            game.due += elapsed;
+            let pace = game.pace();
+            for _ in 0..CATCHUP {
+                if game.due < pace {
+                    break;
+                }
+                game.due -= pace;
+                game.step();
             }
-            game.due -= pace;
-            game.step();
+            game.due = game.due.min(pace);
         }
-        game.due = game.due.min(pace);
 
         game.draw();
         0

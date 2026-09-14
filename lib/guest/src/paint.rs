@@ -27,6 +27,26 @@ pub fn half(x: usize, y: usize, upper: Option<u8>, lower: Option<u8>) {
     }
 }
 
+/// A word across the middle of a field, in the same reverse video as the status
+/// bar, for a program that has stopped without leaving the screen.
+///
+/// Reverse video because it is the one thing on the screen that is not part of
+/// the picture, which is what the bar uses it for. A stopped field and a running
+/// one have to be told apart without reading anything, so this is a band across
+/// the picture rather than a word tucked into the corner of it.
+///
+/// Centred in `width` and cut to it, since a field can be narrower than a word.
+pub fn notice(x: usize, y: usize, width: usize, text: &str) {
+    let text: Vec<char> = text.chars().collect();
+    let start = x + width.saturating_sub(text.len()) / 2;
+    for at in x..x + width {
+        // Before the text starts, `at - start` wraps to something huge, which
+        // is as absent as anything past the end.
+        let ch = text.get(at.wrapping_sub(start)).copied().unwrap_or(' ');
+        tty::draw(at, y, ch, BAR_FG, BAR_BG);
+    }
+}
+
 /// A run of text, left to right from where it starts.
 pub fn line(x: usize, y: usize, text: &str, colour: u8) {
     for (offset, ch) in text.chars().enumerate() {

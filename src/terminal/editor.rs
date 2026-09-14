@@ -48,6 +48,32 @@ impl Editor {
         }
     }
 
+    /// Puts the field back to an empty prompt with the keyboard on it, for the
+    /// moment a program hands the screen back.
+    ///
+    /// A program is started by submitting a line, so the line is empty while one
+    /// runs, and anything on it afterwards was put there behind the terminal's
+    /// back. The value is written to the element as well as to the signal:
+    /// writing the signal alone changes nothing when it already holds what the
+    /// element should have, which is exactly the case being put right.
+    ///
+    /// Next frame, because the input cannot be focused until the scrollback it
+    /// sits in is back on the screen.
+    pub fn reset(self) {
+        // Through `set`, so what follows is a fresh line rather than one still
+        // holding a place in the history.
+        self.set(String::new());
+        self.scrolled.set(0);
+        self.column.set(0);
+        request_animation_frame(move || {
+            if let Some(field) = self.field.get_untracked() {
+                field.set_value("");
+                let _ = field.set_selection_range(0, 0);
+                let _ = field.focus();
+            }
+        });
+    }
+
     /// Replaces the line, as recall and completion both do. Anything typed
     /// after this is a fresh line again.
     pub fn set(self, line: String) {

@@ -6,8 +6,10 @@
 use std::sync::Arc;
 
 use axum::Router;
-use axum::http::header;
+use axum::extract::{Request, State};
+use axum::http::{Uri, header};
 use axum::middleware::from_fn;
+use axum::response::Response;
 use axum::routing::get;
 use leptos::config::LeptosOptions;
 use leptos_axum::render_app_to_stream;
@@ -61,8 +63,25 @@ pub fn router(options: LeptosOptions, wall: Arc<wall::State>) -> Router {
             })),
         )
         // Everything under the site root, and a 404 for anything else. The
-        // pages the old site had are gone, so they land here.
-        .fallback(leptos_axum::file_and_error_handler(shell))
+        // pages the old site had are gone, so they land there.
+        .fallback(elsewhere)
         .layer(from_fn(logging::log_request))
         .with_state(options)
+}
+
+/// Anything that is not one of the routes above.
+///
+/// A file under the site root is served as itself; everything else is the page
+/// again, with a 404 status and the path that was asked for, which the view
+/// names under the banner before putting the url itself right.
+///
+/// The handler is built per request because the path is what it carries, and
+/// leptos hands the render its context through a closure that takes none.
+async fn elsewhere(uri: Uri, state: State<LeptosOptions>, request: Request) -> Response {
+    let asked = crate::missing_path(uri.path());
+    leptos_axum::file_and_error_handler_with_context(
+        move || leptos::prelude::provide_context(crate::Missing(asked.clone())),
+        shell,
+    )(uri, state, request)
+    .await
 }

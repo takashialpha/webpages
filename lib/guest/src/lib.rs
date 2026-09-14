@@ -13,4 +13,4 @@ mod keys;
 mod paint;
 
 pub use keys::{Key, Keys};
-pub use paint::{half, line, status};
+pub use paint::{half, line, notice, status};

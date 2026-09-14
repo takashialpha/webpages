@@ -9,9 +9,12 @@
 
 use std::cell::RefCell;
 
-use guest::{Key, Keys, tty};
+use guest::{Key, Keys, status, tty};
 
 const STARS: usize = 240;
+
+/// The row the status bar takes, which is not part of the sky.
+const BAR: usize = 1;
 
 /// A count of cells as a distance. Exact, since a screen is never more than a
 /// few thousand cells across.
@@ -75,7 +78,9 @@ impl Field {
     }
 
     fn draw(&mut self, elapsed: f32) {
-        let (width, height) = (span(tty::width()), span(tty::height()));
+        // The bottom row belongs to the bar, so no star is put there to be
+        // painted over a moment later.
+        let (width, height) = (span(tty::width()), span(tty::height().saturating_sub(BAR)));
         if width < 1.0 || height < 1.0 {
             return;
         }
@@ -106,6 +111,25 @@ impl Field {
                 tty::draw(cell(star.x), cell(star.y), glyph, colour, 0);
             }
         }
+
+        // A starfield has no other way to say what its two keys are. Named by
+        // what the key would do next, the way `life` names it: space toggles, so
+        // it offers whichever it is not.
+        let toggle = if paused {
+            "space: resume"
+        } else {
+            "space: pause"
+        };
+        status(
+            &format!(
+                " stars │ {} │ {}×{} │{}",
+                self.stars.len(),
+                cell(width),
+                cell(height),
+                if paused { " paused │" } else { "" },
+            ),
+            &[toggle, "q: quit"],
+        );
     }
 }
 
