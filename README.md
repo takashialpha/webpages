@@ -43,19 +43,20 @@ Typing something that is not a command gets a shell's answer rather than one cat
 
 ## Running it
 
-The wasm targets and the tools:
+The tools:
 
 ```sh
-rustup target add wasm32-unknown-unknown wasm32-wasip1
 cargo install cargo-leptos cargo-shear just
 ```
+
+Build with the latest stable Rust: webpages tracks the stable channel rather than supporting a minimum version, and uses new language features as they land. `rust-toolchain.toml` pins the channel to `stable` and lists the two wasm targets, and rustup fetches whatever is missing on first use. If cargo reports your toolchain is too old, run `rustup update stable`. `rust-version` in `Cargo.toml` is the stable of the day, not a support floor, and is raised to the new stable whenever the channel moves.
 
 Then:
 
 ```sh
 just serve   # build the programs, then serve on [::1]:3000
 just build   # release build into target/release and target/site
-just check   # what CI runs: fmt, unused deps, clippy for ssr, hydrate and the programs
+just check   # what CI runs: fmt, clippy for ssr, hydrate and the programs, unused deps
 ```
 
 `just --list` has the rest. The address comes from `site-addr` in `Cargo.toml`, or `LEPTOS_SITE_ADDR`.

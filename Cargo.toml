@@ -15,6 +15,12 @@ guest = { path = "lib/guest" }
 
 [workspace.package]
 edition = "2024"
+# The current stable at the time of the last toolchain bump, not a support
+# floor: webpages tracks the stable channel (see rust-toolchain.toml). Raise
+# this to the new stable whenever the channel moves. It is here so an old
+# toolchain fails with a clear message instead of a syntax error on a feature
+# it does not have.
+rust-version = "1.99"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/takashialpha/webpages"
 # Resolved against the workspace root, so every member points at the one README.
@@ -27,6 +33,7 @@ description = "My personal site, a tty in the browser, served live at takashialp
 keywords = ["website", "leptos", "axum", "terminal"]
 categories = ["web-programming"]
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 license.workspace = true
 repository.workspace = true

@@ -200,7 +200,7 @@ impl Game {
     /// Faster as it grows, down to a floor.
     fn pace(&self) -> f32 {
         let eaten = f32::from(u16::try_from(self.score.min(40)).unwrap_or(0));
-        (START - eaten * 2.0).max(FASTEST)
+        eaten.mul_add(-2.0, START).max(FASTEST)
     }
 
     const fn turn(&mut self, way: Way) {

@@ -45,15 +45,11 @@ serve: guests
     cargo leptos serve --release
 
 # everything CI runs
-check: fmt deps (lint "ssr") (lint "hydrate") (lint "guests")
+check: fmt (lint "ssr") (lint "hydrate") (lint "guests") deps
 
 # check formatting
 fmt:
     cargo fmt --all -- --check
-
-# check for unused dependencies
-deps:
-    cargo shear
 
 # lint one target: ssr, hydrate, or guests
 lint target:
@@ -66,6 +62,10 @@ lint target:
       *) echo "no such target: {{ target }}" >&2; exit 1 ;;
     esac
     cargo clippy $args -- -D warnings
+
+# check for unused dependencies
+deps:
+    cargo shear
 
 # throw away everything built
 clean:

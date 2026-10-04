@@ -5,6 +5,7 @@ description = "Snake, as a wasm guest."
 keywords = ["wasm", "wasi", "terminal", "game"]
 categories = ["games"]
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 license.workspace = true
 repository.workspace = true

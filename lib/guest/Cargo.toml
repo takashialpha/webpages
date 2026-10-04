@@ -5,6 +5,7 @@ description = "The screen, keyboard and chrome the programs in bin/ share."
 keywords = ["wasm", "wasi", "terminal"]
 categories = ["command-line-utilities"]
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 license.workspace = true
 repository.workspace = true
