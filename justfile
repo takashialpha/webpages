@@ -45,7 +45,7 @@ serve: guests
     cargo leptos serve --release
 
 # everything CI runs
-check: fmt (lint "ssr") (lint "hydrate") (lint "guests") deps
+check: fmt (lint "ssr") (lint "hydrate") (lint "guests") deps build
 
 # check formatting
 fmt:

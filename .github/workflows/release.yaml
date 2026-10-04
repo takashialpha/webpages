@@ -1,16 +1,21 @@
 name: Release
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: write
+
 concurrency:
   group: release
   cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable

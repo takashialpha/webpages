@@ -56,7 +56,7 @@ Then:
 ```sh
 just serve   # build the programs, then serve on [::1]:3000
 just build   # release build into target/release and target/site
-just check   # what CI runs: fmt, clippy for ssr, hydrate and the programs, unused deps
+just check   # what CI runs: fmt, clippy for ssr, hydrate and the programs, unused deps, build
 ```
 
 `just --list` has the rest. The address comes from `site-addr` in `Cargo.toml`, or `LEPTOS_SITE_ADDR`.
