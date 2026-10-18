@@ -12,20 +12,26 @@ env:
 
 jobs:
   fmt:
-    name: rustfmt
+    name: Format check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - uses: taiki-e/install-action@v2
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
         with:
           tool: just
-      - run: just fmt
+
+      - name: Format check
+        run: just fmt
 
   clippy:
-    name: clippy (${{ matrix.target }})
+    name: Clippy (${{ matrix.target }})
     runs-on: ubuntu-latest
     strategy:
       # The names `just lint` knows. What each one actually passes to clippy
@@ -34,39 +40,60 @@ jobs:
         target: [ssr, hydrate, guests]
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
           targets: wasm32-unknown-unknown, wasm32-wasip1
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
         with:
           tool: just
-      - run: just lint ${{ matrix.target }}
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: just lint ${{ matrix.target }}
 
   deps:
-    name: cargo shear
+    name: Unused dependencies
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install tools
+        uses: taiki-e/install-action@v2
         with:
           tool: cargo-shear, just
-      - run: just deps
+
+      - name: Unused dependencies
+        run: just deps
 
   build:
-    name: just build
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown, wasm32-wasip1
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+
+      - name: Install tools
+        uses: taiki-e/install-action@v2
         with:
           tool: cargo-leptos, just
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
       # The guests as well as the site, which is what a deploy ships.
-      - run: just build
+      - name: Build
+        run: just build

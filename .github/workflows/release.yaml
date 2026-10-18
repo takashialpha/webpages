@@ -12,24 +12,37 @@ concurrency:
   group: release
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
           # wasip1 is for the guest programs in bin/, which are separate
           # crates built for a different target than the site itself.
           targets: wasm32-unknown-unknown, wasm32-wasip1
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+
+      - name: Install tools
+        uses: taiki-e/install-action@v2
         with:
           tool: cargo-leptos, just
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
       # Guests first, because they land in `public/`, which is what
       # cargo-leptos copies into the site. One recipe is the whole build.
-      - run: just build
+      - name: Build release
+        run: just build
+
       - name: Package
         run: |
           mkdir -p dist
@@ -43,11 +56,14 @@ jobs:
           cp -r deploy dist/deploy
           tar -C dist -czf webpages-x86_64-linux.tar.gz webpages hash.txt site deploy
           sha256sum webpages-x86_64-linux.tar.gz > webpages-x86_64-linux.tar.gz.sha256
+
       - name: Drop previous rolling release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release delete build --yes --cleanup-tag || true
-      - uses: softprops/action-gh-release@v3
+
+      - name: Create rolling GitHub Release
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: build
           name: Latest build
