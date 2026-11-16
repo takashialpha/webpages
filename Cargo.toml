@@ -20,7 +20,7 @@ edition = "2024"
 # this to the new stable whenever the channel moves. It is here so an old
 # toolchain fails with a clear message instead of a syntax error on a feature
 # it does not have.
-rust-version = "1.99.1"
+rust-version = "1.100"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/takashialpha/webpages"
 # Resolved against the workspace root, so every member points at the one README.
@@ -220,13 +220,16 @@ cargo = { level = "deny", priority = -1 }
 # about.
 multiple_crate_versions = "allow"
 
-# All three are about leptos's `#[component]` macro. It expands a component
+# All four are about leptos's `#[component]` macro. It expands a component
 # into a trait impl with a same-named method; `view! {}` trees are long the way
-# markup is long; and a `#[must_use]` on the source function does not reach the
-# generated impl, so asking for one would be a no-op.
+# markup is long; a `#[must_use]` on the source function does not reach the
+# generated impl, so asking for one would be a no-op; and the props builder it
+# derives for a component with `children` declares a variantless enum as a
+# typestate marker, which an attribute on the function cannot reach either.
 same_name_method = "allow"
 too_many_lines = "allow"
 must_use_candidate = "allow"
+empty_enums = "allow"
 
 # Picked out of `clippy::restriction` one at a time. Not the whole group: many
 # of its lints contradict each other, or the choices above.
